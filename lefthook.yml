@@ -1,0 +1,8 @@
+pre-commit:
+  commands:
+    typecheck:
+      run: npx tsc --noEmit
+    lint:
+      run: npx eslint src/
+    test:
+      run: npx vitest run --passWithNoTests --coverage

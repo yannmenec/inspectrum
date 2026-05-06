@@ -1,0 +1,46 @@
+{
+  "name": "prism-plan-review",
+  "version": "0.1.0",
+  "description": "Universal MCP server for inter-LLM plan review",
+  "type": "module",
+  "bin": {
+    "prism-plan-review": "./dist/server.js"
+  },
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "dev": "node --import tsx/esm src/server.ts"
+  },
+  "keywords": [
+    "mcp",
+    "plan-review",
+    "llm",
+    "claude",
+    "codex",
+    "gemini"
+  ],
+  "author": "Yann Menec",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.2",
+    "@typescript-eslint/parser": "^8.59.2",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^10.3.0",
+    "lefthook": "^2.1.6",
+    "nock": "^14.0.14",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}
