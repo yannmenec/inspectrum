@@ -1,10 +1,10 @@
 {
-  "name": "prism-plan-review",
+  "name": "inspectrum",
   "version": "0.1.0",
-  "description": "Universal MCP server for inter-LLM plan review",
+  "description": "Universal MCP server for multi-LLM plan, code, and PR review",
   "type": "module",
   "bin": {
-    "prism-plan-review": "./dist/server.js"
+    "inspectrum": "./dist/server.js"
   },
   "main": "./dist/server.js",
   "scripts": {
@@ -16,10 +16,12 @@
   "keywords": [
     "mcp",
     "plan-review",
+    "code-review",
     "llm",
     "claude",
     "codex",
-    "gemini"
+    "gemini",
+    "multi-llm"
   ],
   "author": "Yann Menec",
   "license": "MIT",
