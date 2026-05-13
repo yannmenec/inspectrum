@@ -317,7 +317,7 @@ async function runKimiJsonReview(opts: {
   timeoutMs: number;
   label: string;
 }): Promise<RawReview> {
-  // ASSUMPTION: kimi CLI (npm install -g @moonshotai/kimi-cli) uses:
+  // ASSUMPTION: kimi CLI (uv tool install --python 3.13 kimi-cli) uses:
   //   kimi -m <model> -p <systemPrompt>
   //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
   // Auth: MOONSHOT_API_KEY env var (CLI reads automatically)
@@ -337,7 +337,7 @@ async function runQwenJsonReview(opts: {
   timeoutMs: number;
   label: string;
 }): Promise<RawReview> {
-  // ASSUMPTION: qwen CLI (npm install -g @qwenlm/qwen-code) uses:
+  // ASSUMPTION: qwen CLI (npm install -g @qwen-code/qwen-code@latest) uses:
   //   qwen -m <model> -p <systemPrompt>
   //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
   // Auth: DASHSCOPE_API_KEY env var (CLI reads automatically)

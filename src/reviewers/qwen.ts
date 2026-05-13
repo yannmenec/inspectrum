@@ -3,7 +3,7 @@ import { buildUserMessage, runBackendJsonReview, truncatePlan } from "./common.j
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 import type { Reviewer } from "./index.js";
 
-// ASSUMPTION: qwen CLI (npm install -g @qwenlm/qwen-code) uses:
+// ASSUMPTION: qwen CLI (npm install -g @qwen-code/qwen-code@latest) uses:
 //   qwen -m <model> -p <systemPrompt>
 //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
 // Auth: DASHSCOPE_API_KEY env var (CLI reads automatically)

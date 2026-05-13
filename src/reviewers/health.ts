@@ -19,6 +19,9 @@ function resolveHealthEndpoint(_id: string, config: ReviewerConfig): string {
     const base = (config.endpoint ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
     return `${base}/models`;
   }
+  if (config.backend === "ollama") {
+    return (config.endpoint ?? "http://localhost:11434").replace(/\/$/, "");
+  }
   return config.endpoint ?? "";
 }
 
@@ -60,8 +63,8 @@ function installFix(id: string): string {
     claude: "Install Claude Code: https://claude.ai/download",
     codex: "Install Codex: https://codex.com/download",
     gemini: "Install Gemini CLI: npm install -g @google/gemini-cli",
-    kimi: "Install Kimi CLI: npm install -g @moonshotai/kimi-cli",
-    qwen: "Install Qwen Code CLI: npm install -g @qwenlm/qwen-code",
+    kimi: "Install Kimi CLI: uv tool install --python 3.13 kimi-cli",
+    qwen: "Install Qwen Code CLI: npm install -g @qwen-code/qwen-code@latest",
     ollama: "Start Ollama: brew install ollama && ollama serve",
     openrouter: "Set OPENROUTER_API_KEY env var: https://openrouter.ai/keys",
   };

@@ -3,7 +3,7 @@ import { buildUserMessage, runBackendJsonReview, truncatePlan } from "./common.j
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 import type { Reviewer } from "./index.js";
 
-// ASSUMPTION: kimi CLI (npm install -g @moonshotai/kimi-cli) uses:
+// ASSUMPTION: kimi CLI (uv tool install --python 3.13 kimi-cli) uses:
 //   kimi -m <model> -p <systemPrompt>
 //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
 // Auth: MOONSHOT_API_KEY env var (CLI reads automatically)

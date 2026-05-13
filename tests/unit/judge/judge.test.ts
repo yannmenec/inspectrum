@@ -58,6 +58,7 @@ const PLAN = "# My Plan\nDo some stuff.";
 describe("runJudge", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllGlobals();
     vi.mocked(fs.mkdtempSync).mockReturnValue("/tmp/inspectrum-judge-codex" as never);
     vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
     vi.mocked(fs.rmSync).mockImplementation(() => undefined);
@@ -276,6 +277,46 @@ describe("runJudge", () => {
     expect(status).toBe("success");
     expect(result.verdict).toBe("approve");
     expect(vi.mocked(fs.readFileSync)).toHaveBeenCalledWith("/tmp/inspectrum-judge-codex/output.json", "utf8");
+  });
+
+  it("runs an OpenRouter-backed judge through the HTTP review path", async () => {
+    const consolidated = {
+      verdict: "revise",
+      findings: [majorFinding("model", "No rollback")],
+      summary: "Consolidated.",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ choices: [{ message: { content: JSON.stringify(consolidated) } }] }),
+        text: () => Promise.resolve(""),
+      }),
+    );
+    const rawReviews: RawReview[] = [
+      { reviewer: "claude", verdict: "revise", findings: [majorFinding("claude", "No rollback")] },
+      { reviewer: "codex", verdict: "approve", findings: [] },
+    ];
+    const config = {
+      ...defaultConfig,
+      defaults: { ...defaultConfig.defaults, judge: "openrouter-judge" },
+      reviewers: {
+        ...defaultConfig.reviewers,
+        "openrouter-judge": {
+          type: "http" as const,
+          backend: "openrouter" as const,
+          endpoint: "https://openrouter.ai/api/v1",
+        },
+      },
+    };
+
+    const { review: result, status } = await runJudge(rawReviews, PLAN, "openrouter-judge", config);
+
+    expect(status).toBe("success");
+    expect(result.reviewer).toBe("judge");
+    expect(result.findings[0]!.reviewer).toBe("judge");
+    expect(vi.mocked(fetch).mock.calls[0]![0]).toBe("https://openrouter.ai/api/v1/chat/completions");
   });
 
   it("falls back explicitly when judge config is missing", async () => {

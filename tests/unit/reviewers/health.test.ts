@@ -64,6 +64,13 @@ describe("checkReviewer — HTTP", () => {
     });
   });
 
+  it("ollama health check uses default endpoint when backend is explicit", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    await checkReviewer("ollama", { type: "http", backend: "ollama" });
+    const url = vi.mocked(fetch).mock.calls[0]![0] as string;
+    expect(url).toBe("http://localhost:11434");
+  });
+
   it("provides install hint for ollama when binary missing", () => {
     const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
     // CLI ollama would use checkCli — test via installFix indirectly through a CLI config
@@ -79,7 +86,7 @@ describe("checkReviewer — HTTP", () => {
     vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
     return expect(checkReviewer("kimi", { type: "cli", binary: "kimi" })).resolves.toMatchObject({
       ok: false,
-      fix: expect.stringContaining("@moonshotai/kimi-cli"),
+      fix: expect.stringContaining("uv tool install"),
     });
   });
 
@@ -88,7 +95,7 @@ describe("checkReviewer — HTTP", () => {
     vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
     return expect(checkReviewer("qwen", { type: "cli", binary: "qwen" })).resolves.toMatchObject({
       ok: false,
-      fix: expect.stringContaining("@qwenlm/qwen-code"),
+      fix: expect.stringContaining("@qwen-code/qwen-code"),
     });
   });
 
