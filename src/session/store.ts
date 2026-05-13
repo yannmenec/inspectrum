@@ -1,9 +1,24 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, readFile, readdir, rename, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, rename, rm, chmod } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import type { RawReview } from "../schemas.js";
+
+/**
+ * Ensures a directory exists with 0700 permissions on POSIX. The session log can
+ * contain user plans and full reviewer transcripts — world-readable by default
+ * was a privacy footgun. Windows skipped (no POSIX perm model).
+ *
+ * Existing directories from older inspectrum runs retain their original perms;
+ * users can retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
+ */
+export async function ensurePrivateDir(path: string): Promise<void> {
+  await mkdir(path, { recursive: true });
+  if (process.platform !== "win32") {
+    await chmod(path, 0o700);
+  }
+}
 
 export interface SessionData {
   id: string;
@@ -54,7 +69,7 @@ export async function writeSession(opts: WriteSessionOptions): Promise<WriteSess
   const sessionPath = join(baseDir, dirName);
   const tmpPath = join(baseDir, `${dirName}.tmp-${randomUUID()}`);
 
-  await mkdir(baseDir, { recursive: true });
+  await ensurePrivateDir(baseDir);
   await mkdir(tmpPath);
 
   try {
@@ -74,6 +89,10 @@ export async function writeSession(opts: WriteSessionOptions): Promise<WriteSess
     ]);
 
     await rename(tmpPath, sessionPath);
+    // Chmod after rename so the final visible directory has the restricted perms.
+    if (process.platform !== "win32") {
+      await chmod(sessionPath, 0o700);
+    }
   } catch (err) {
     await rm(tmpPath, { recursive: true, force: true }).catch(() => {});
     throw err;

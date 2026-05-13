@@ -137,3 +137,38 @@ describe("readSessionFile", () => {
     expect(content).toBeNull();
   });
 });
+
+describe("writeSession — permissions", () => {
+  it.skipIf(process.platform === "win32")(
+    "chmods the session directory to 0700 on POSIX",
+    async () => {
+      const { sessionPath } = await writeSession({
+        session: sampleSession,
+        planInput: "# Plan",
+        reviews: { claude: "ok" },
+        report: "# Report",
+        baseDir: tmpDir,
+      });
+      const { statSync } = await import("node:fs");
+      const mode = statSync(sessionPath).mode & 0o777;
+      expect(mode).toBe(0o700);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "chmods the sessions base directory to 0700 on POSIX",
+    async () => {
+      const isolatedBase = join(tmpDir, "fresh-base");
+      await writeSession({
+        session: sampleSession,
+        planInput: "# Plan",
+        reviews: { claude: "ok" },
+        report: "# Report",
+        baseDir: isolatedBase,
+      });
+      const { statSync } = await import("node:fs");
+      const mode = statSync(isolatedBase).mode & 0o777;
+      expect(mode).toBe(0o700);
+    },
+  );
+});
