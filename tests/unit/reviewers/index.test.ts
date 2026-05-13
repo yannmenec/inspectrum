@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { createReviewer, ClaudeReviewer, CodexReviewer, GeminiReviewer } from "../../../src/reviewers/index.js";
+import {
+  createReviewer,
+  ClaudeReviewer,
+  CodexReviewer,
+  GeminiReviewer,
+  OllamaReviewer,
+  OpenRouterReviewer,
+  KimiReviewer,
+  QwenReviewer,
+} from "../../../src/reviewers/index.js";
 
 describe("createReviewer", () => {
   it("returns a ClaudeReviewer for claude cli config", () => {
@@ -23,7 +32,7 @@ describe("createReviewer", () => {
   it("throws for unknown backend id", () => {
     expect(() =>
       createReviewer("some-llm", { type: "http", endpoint: "http://localhost:11434" }),
-    ).toThrow(/not supported/i);
+    ).toThrow(/explicit backend/i);
   });
 
   it("honors an explicit backend when id and binary are aliases", () => {
@@ -43,9 +52,37 @@ describe("createReviewer", () => {
     expect(reviewer.id).toBe("my-claude");
   });
 
-  it("rejects http reviewers explicitly", () => {
+  it("rejects http reviewers without a known http backend", () => {
     expect(() =>
-      createReviewer("claude", { type: "http", backend: "claude", endpoint: "http://localhost:11434" }),
-    ).toThrow(/http.*not supported/i);
+      createReviewer("myreviewer", { type: "http", endpoint: "http://localhost:11434" }),
+    ).toThrow(/explicit backend/i);
+  });
+
+  it("returns an OllamaReviewer for ollama http config", () => {
+    const reviewer = createReviewer("ollama", { type: "http", backend: "ollama", endpoint: "http://localhost:11434" });
+    expect(reviewer).toBeInstanceOf(OllamaReviewer);
+    expect(reviewer.id).toBe("ollama");
+  });
+
+  it("returns an OpenRouterReviewer for openrouter http config", () => {
+    const reviewer = createReviewer("openrouter", {
+      type: "http",
+      backend: "openrouter",
+      endpoint: "https://openrouter.ai/api/v1",
+    });
+    expect(reviewer).toBeInstanceOf(OpenRouterReviewer);
+    expect(reviewer.id).toBe("openrouter");
+  });
+
+  it("returns a KimiReviewer for kimi cli config", () => {
+    const reviewer = createReviewer("kimi", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(KimiReviewer);
+    expect(reviewer.id).toBe("kimi");
+  });
+
+  it("returns a QwenReviewer for qwen cli config", () => {
+    const reviewer = createReviewer("qwen", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(QwenReviewer);
+    expect(reviewer.id).toBe("qwen");
   });
 });

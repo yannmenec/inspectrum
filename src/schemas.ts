@@ -42,12 +42,23 @@ export const ClaudeEnvelopeSchema = z.object({
 
 export const ReviewerConfigSchema = z.object({
   type: z.enum(["cli", "http"]),
-  backend: z.enum(["claude", "codex", "gemini"]).optional(),
+  backend: z.enum(["claude", "codex", "gemini", "ollama", "openrouter", "kimi", "qwen"]).optional(),
   binary: z.string().optional(),
   args: z.array(z.string()).optional(),
   endpoint: z.string().optional(),
   model: z.string().optional(),
 });
+
+export const OllamaResponseSchema = z.object({
+  message: z.object({ content: z.string() }),
+});
+
+export const OpenRouterResponseSchema = z.object({
+  choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1),
+});
+
+export type OllamaResponse = z.infer<typeof OllamaResponseSchema>;
+export type OpenRouterResponse = z.infer<typeof OpenRouterResponseSchema>;
 
 export type Finding = z.infer<typeof FindingSchema>;
 export type ReviewPlanInput = z.infer<typeof ReviewPlanInputSchema>;

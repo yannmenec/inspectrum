@@ -329,7 +329,7 @@ describe("runJudge", () => {
     const { status, error } = await runJudge(rawReviews, PLAN, "http-judge", config);
 
     expect(status).toBe("fallback");
-    expect(error).toMatch(/http.*not supported/i);
+    expect(error).toMatch(/explicit backend/i);
   });
 
   it("fallback dedup keeps the highest severity for duplicate messages", async () => {

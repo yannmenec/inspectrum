@@ -9,9 +9,16 @@ export interface HealthResult {
 
 export async function checkReviewer(id: string, config: ReviewerConfig): Promise<HealthResult> {
   if (config.type === "http") {
-    return checkHttp(config.endpoint ?? "");
+    return checkHttp(resolveHealthEndpoint(id, config));
   }
   return checkCli(id, config.binary ?? id);
+}
+
+function resolveHealthEndpoint(_id: string, config: ReviewerConfig): string {
+  if (config.backend === "openrouter") {
+    return (config.endpoint ?? "").replace(/\/$/, "") + "/models";
+  }
+  return config.endpoint ?? "";
 }
 
 function checkCli(id: string, binary: string): HealthResult {
@@ -52,6 +59,10 @@ function installFix(id: string): string {
     claude: "Install Claude Code: https://claude.ai/download",
     codex: "Install Codex: https://codex.com/download",
     gemini: "Install Gemini CLI: npm install -g @google/gemini-cli",
+    kimi: "Install Kimi CLI: npm install -g @moonshotai/kimi-cli",
+    qwen: "Install Qwen Code CLI: npm install -g @qwenlm/qwen-code",
+    ollama: "Start Ollama: brew install ollama && ollama serve",
+    openrouter: "Set OPENROUTER_API_KEY env var: https://openrouter.ai/keys",
   };
   return fixes[id] ?? `Install the ${id} CLI and ensure it is in your PATH`;
 }

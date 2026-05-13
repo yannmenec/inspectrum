@@ -6,7 +6,7 @@ import { basename, join } from "node:path";
 import { RawReviewSchema, ClaudeEnvelopeSchema } from "../schemas.js";
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 
-export type ReviewerBackend = "claude" | "codex" | "gemini";
+export type ReviewerBackend = "claude" | "codex" | "gemini" | "ollama" | "openrouter" | "kimi" | "qwen";
 
 const PLAN_MAX_CHARS = 16000;
 const TRUNCATION_MARKER = "\n\n[...truncated]";
@@ -65,7 +65,10 @@ export function buildUserMessage(reviewerId: string, plan: string, focus: string
 
 export function resolveReviewerBackend(id: string, config: ReviewerConfig): ReviewerBackend {
   if (config.type === "http") {
-    throw new ReviewerOperationalError(`HTTP reviewers are not supported in this release: ${id}`);
+    if (config.backend === "ollama" || config.backend === "openrouter") return config.backend;
+    throw new ReviewerOperationalError(
+      `HTTP reviewers require an explicit backend of "ollama" or "openrouter". Got: ${id}`,
+    );
   }
 
   if (config.backend) return config.backend;
@@ -76,12 +79,14 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
   const idBackend = backendFromName(id);
   if (idBackend) return idBackend;
 
-  throw new ReviewerOperationalError(`Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini.`);
+  throw new ReviewerOperationalError(
+    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen.`,
+  );
 }
 
 function backendFromName(name: string): ReviewerBackend | undefined {
-  if (name === "claude" || name === "codex" || name === "gemini") return name;
-  return undefined;
+  const known = ["claude", "codex", "gemini", "kimi", "qwen"] as const;
+  return (known as readonly string[]).includes(name) ? (name as ReviewerBackend) : undefined;
 }
 
 export async function runBackendJsonReview(opts: {
@@ -93,13 +98,67 @@ export async function runBackendJsonReview(opts: {
   timeoutMs: number;
   label: string;
 }): Promise<RawReview> {
-  if (opts.backend === "claude") {
-    return runClaudeJsonReview(opts);
+  if (opts.backend === "ollama" || opts.backend === "openrouter") {
+    throw new ReviewerOperationalError(
+      `HTTP backend "${opts.backend}" must use runHttpJsonReview, not runBackendJsonReview`,
+    );
   }
-  if (opts.backend === "codex") {
-    return runCodexJsonReview(opts);
-  }
+  if (opts.backend === "claude") return runClaudeJsonReview(opts);
+  if (opts.backend === "codex") return runCodexJsonReview(opts);
+  if (opts.backend === "kimi") return runKimiJsonReview(opts);
+  if (opts.backend === "qwen") return runQwenJsonReview(opts);
   return runGeminiJsonReview(opts);
+}
+
+export async function runHttpJsonReview(opts: {
+  reviewerId: string;
+  endpoint: string;
+  model: string;
+  headers: Record<string, string>;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+  parseResponse: (body: unknown) => string;
+  extraBodyFields?: Record<string, unknown>;
+}): Promise<RawReview> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(opts.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...opts.headers },
+      body: JSON.stringify({
+        model: opts.model,
+        messages: [
+          { role: "system", content: opts.systemPrompt + JSON_INSTRUCTION },
+          { role: "user", content: opts.userMessage },
+        ],
+        stream: false,
+        ...opts.extraBodyFields,
+      }),
+      signal: ctrl.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    throw new ReviewerOperationalError(`${opts.label} reviewer request failed: ${errorMessage(err)}`);
+  }
+  clearTimeout(timer);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new ReviewerOperationalError(
+      `${opts.label} reviewer returned HTTP ${res.status}: ${body.slice(0, 200)}`,
+    );
+  }
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    throw new ReviewerOperationalError(`${opts.label} reviewer returned non-JSON response`);
+  }
+  const raw = opts.parseResponse(json);
+  return parseRawReview(stripJsonPayload(raw), opts.reviewerId, opts.label);
 }
 
 async function runClaudeJsonReview(opts: {
@@ -169,6 +228,46 @@ async function runGeminiJsonReview(opts: {
 }): Promise<RawReview> {
   const binary = opts.config.binary ?? "gemini";
   const model = extractModel(opts.config, "gemini-2.5-pro");
+  const args = ["-m", model, "-p", opts.systemPrompt + JSON_INSTRUCTION];
+  const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
+  return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+}
+
+async function runKimiJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  // ASSUMPTION: kimi CLI (npm install -g @moonshotai/kimi-cli) uses:
+  //   kimi -m <model> -p <systemPrompt>
+  //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
+  // Auth: MOONSHOT_API_KEY env var (CLI reads automatically)
+  // If actual CLI flags differ, update the args array below.
+  const binary = opts.config.binary ?? "kimi";
+  const model = extractModel(opts.config, "kimi-k2");
+  const args = ["-m", model, "-p", opts.systemPrompt + JSON_INSTRUCTION];
+  const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
+  return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+}
+
+async function runQwenJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  // ASSUMPTION: qwen CLI (npm install -g @qwenlm/qwen-code) uses:
+  //   qwen -m <model> -p <systemPrompt>
+  //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
+  // Auth: DASHSCOPE_API_KEY env var (CLI reads automatically)
+  // If actual CLI flags differ, update the args array below.
+  const binary = opts.config.binary ?? "qwen";
+  const model = extractModel(opts.config, "qwen3-235b-a22b");
   const args = ["-m", model, "-p", opts.systemPrompt + JSON_INSTRUCTION];
   const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
