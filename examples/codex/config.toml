@@ -9,6 +9,6 @@
 command = "node"
 args    = ["/absolute/path/to/inspectrum/dist/server.js"]
 
-# After `npm publish` (J7), replace with:
+# Once published on npm, replace the two lines above with:
 # command = "npx"
 # args    = ["-y", "inspectrum@latest"]

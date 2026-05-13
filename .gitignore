@@ -3,3 +3,7 @@ dist/
 *.js.map
 .env
 coverage/
+.DS_Store
+*.tsbuildinfo
+.idea/
+.vscode/
