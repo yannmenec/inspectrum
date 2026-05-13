@@ -8,22 +8,54 @@ export const FindingSchema = z.object({
   suggested_fix: z.string().optional(),
 });
 
-export const ReviewPlanInputSchema = z.object({
-  plan: z.string().max(16000, "Plan exceeds 16 000 character limit"),
-  reviewers: z.array(z.string()).optional(),
-  focus: z.enum(["correctness", "completeness", "risk", "clarity", "all"]).default("all"),
-  judge: z.boolean().default(true),
-  context: z.string().max(8000, "Context exceeds 8 000 character limit").optional(),
-});
+/**
+ * Raw Zod shape for the review_plan MCP tool input. Source of truth — server.ts
+ * passes this directly to McpServer.registerTool's `inputSchema` (which accepts
+ * a `ZodRawShapeCompat = Record<string, ZodTypeAny>`), and ReviewPlanInputSchema
+ * is `z.object()` over the same shape. Keep .describe() and custom max-length
+ * messages here, NOT in server.ts.
+ */
+export const ReviewPlanToolShape = {
+  plan: z
+    .string()
+    .max(16000, "Plan exceeds 16 000 character limit")
+    .describe("The plan to review, in Markdown. Max 16 000 characters."),
+  reviewers: z
+    .array(z.string())
+    .optional()
+    .describe("Reviewer IDs (from config). Defaults to config defaults.reviewers."),
+  focus: z
+    .enum(["correctness", "completeness", "risk", "clarity", "all"])
+    .default("all")
+    .describe("Review focus area."),
+  judge: z
+    .boolean()
+    .default(true)
+    .describe("Run judge agent to consolidate when >= 2 reviewers."),
+  context: z
+    .string()
+    .max(8000, "Context exceeds 8 000 character limit")
+    .optional()
+    .describe("Optional codebase excerpts for context. Max 8 000 characters."),
+} as const;
 
-export const ReviewPlanOutputSchema = z.object({
+export const ReviewPlanInputSchema = z.object(ReviewPlanToolShape);
+
+/**
+ * Raw Zod shape for the review_plan MCP tool output. server.ts passes this as
+ * `outputSchema`; the handler returns structuredContent that the SDK validates
+ * against ReviewPlanOutputSchema = z.object(ReviewPlanToolOutputShape).
+ */
+export const ReviewPlanToolOutputShape = {
   verdict: z.enum(["approve", "revise", "reject"]),
   report_markdown: z.string(),
   findings: z.array(FindingSchema),
   revised_plan: z.string().optional(),
   session_id: z.string(),
   session_path: z.string(),
-});
+} as const;
+
+export const ReviewPlanOutputSchema = z.object(ReviewPlanToolOutputShape);
 
 // Schema for the structured JSON a reviewer CLI must produce
 export const RawReviewSchema = z.object({
