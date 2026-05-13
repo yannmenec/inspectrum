@@ -9,6 +9,7 @@ import {
   KimiReviewer,
   QwenReviewer,
 } from "../../../src/reviewers/index.js";
+import { runBackendJsonReview } from "../../../src/reviewers/common.js";
 
 describe("createReviewer", () => {
   it("returns a ClaudeReviewer for claude cli config", () => {
@@ -29,10 +30,20 @@ describe("createReviewer", () => {
     expect(reviewer.id).toBe("gemini");
   });
 
-  it("throws for unknown backend id", () => {
+  it("throws for unknown backend id (http without backend)", () => {
     expect(() =>
       createReviewer("some-llm", { type: "http", endpoint: "http://localhost:11434" }),
     ).toThrow(/explicit backend/i);
+  });
+
+  it("throws for unknown backend id (cli with unknown id)", () => {
+    expect(() => createReviewer("unknown-llm", { type: "cli" })).toThrow(/not supported/i);
+  });
+
+  it("throws when cli config declares an HTTP-only backend", () => {
+    expect(() =>
+      createReviewer("myreviewer", { type: "cli", backend: "ollama" }),
+    ).toThrow(/requires type "http"/i);
   });
 
   it("honors an explicit backend when id and binary are aliases", () => {
@@ -84,5 +95,35 @@ describe("createReviewer", () => {
     const reviewer = createReviewer("qwen", { type: "cli" });
     expect(reviewer).toBeInstanceOf(QwenReviewer);
     expect(reviewer.id).toBe("qwen");
+  });
+});
+
+describe("runBackendJsonReview defensive guard", () => {
+  it("throws when called with ollama backend (must use runHttpBackendJsonReview)", async () => {
+    await expect(
+      runBackendJsonReview({
+        backend: "ollama",
+        reviewerId: "ollama",
+        config: { type: "http", backend: "ollama", endpoint: "http://localhost:11434" },
+        systemPrompt: "s",
+        userMessage: "u",
+        timeoutMs: 5000,
+        label: "Ollama",
+      }),
+    ).rejects.toThrow(/must use runHttpJsonReview/i);
+  });
+
+  it("throws when called with openrouter backend (must use runHttpBackendJsonReview)", async () => {
+    await expect(
+      runBackendJsonReview({
+        backend: "openrouter",
+        reviewerId: "openrouter",
+        config: { type: "http", backend: "openrouter", endpoint: "https://openrouter.ai/api/v1" },
+        systemPrompt: "s",
+        userMessage: "u",
+        timeoutMs: 5000,
+        label: "OpenRouter",
+      }),
+    ).rejects.toThrow(/must use runHttpJsonReview/i);
   });
 });

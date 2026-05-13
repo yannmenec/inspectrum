@@ -3,7 +3,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { RawReviewSchema, ClaudeEnvelopeSchema } from "../schemas.js";
+import { RawReviewSchema, ClaudeEnvelopeSchema, OllamaResponseSchema, OpenRouterResponseSchema } from "../schemas.js";
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 
 export type ReviewerBackend = "claude" | "codex" | "gemini" | "ollama" | "openrouter" | "kimi" | "qwen";
@@ -71,6 +71,11 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
     );
   }
 
+  if (config.backend === "ollama" || config.backend === "openrouter") {
+    throw new ReviewerOperationalError(
+      `Backend "${config.backend}" requires type "http", but type "cli" was configured for: ${id}`,
+    );
+  }
   if (config.backend) return config.backend;
 
   const binaryBackend = config.binary ? backendFromName(basename(config.binary)) : undefined;
@@ -124,41 +129,112 @@ export async function runHttpJsonReview(opts: {
 }): Promise<RawReview> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
-  let res: Response;
   try {
-    res = await fetch(opts.endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...opts.headers },
-      body: JSON.stringify({
-        model: opts.model,
-        messages: [
-          { role: "system", content: opts.systemPrompt + JSON_INSTRUCTION },
-          { role: "user", content: opts.userMessage },
-        ],
-        stream: false,
-        ...opts.extraBodyFields,
-      }),
-      signal: ctrl.signal,
-    });
-  } catch (err) {
+    let res: Response;
+    try {
+      res = await fetch(opts.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...opts.headers },
+        body: JSON.stringify({
+          ...opts.extraBodyFields,
+          model: opts.model,
+          messages: [
+            { role: "system", content: opts.systemPrompt + JSON_INSTRUCTION },
+            { role: "user", content: opts.userMessage },
+          ],
+          stream: false,
+        }),
+        signal: ctrl.signal,
+      });
+    } catch (err) {
+      throw new ReviewerOperationalError(`${opts.label} reviewer request failed: ${errorMessage(err)}`);
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new ReviewerOperationalError(
+        `${opts.label} reviewer returned HTTP ${res.status}: ${body.slice(0, 200)}`,
+      );
+    }
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      throw new ReviewerOperationalError(`${opts.label} reviewer returned non-JSON response`);
+    }
+    const raw = opts.parseResponse(json);
+    return parseRawReview(stripJsonPayload(raw), opts.reviewerId, opts.label);
+  } finally {
     clearTimeout(timer);
-    throw new ReviewerOperationalError(`${opts.label} reviewer request failed: ${errorMessage(err)}`);
   }
-  clearTimeout(timer);
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new ReviewerOperationalError(
-      `${opts.label} reviewer returned HTTP ${res.status}: ${body.slice(0, 200)}`,
-    );
+}
+
+/**
+ * High-level HTTP dispatch: routes ollama/openrouter to runHttpJsonReview
+ * with backend-specific endpoint, headers, and response parsing.
+ * Used by both Reviewer classes and runJudge.
+ */
+export async function runHttpBackendJsonReview(opts: {
+  backend: "ollama" | "openrouter";
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  if (opts.backend === "ollama") {
+    const endpoint = (opts.config.endpoint ?? "http://localhost:11434").replace(/\/$/, "") + "/api/chat";
+    const model = opts.config.model ?? "qwen2.5:0.5b";
+    return runHttpJsonReview({
+      reviewerId: opts.reviewerId,
+      endpoint,
+      model,
+      headers: {},
+      systemPrompt: opts.systemPrompt,
+      userMessage: opts.userMessage,
+      timeoutMs: opts.timeoutMs,
+      label: opts.label,
+      extraBodyFields: { format: "json" },
+      parseResponse: (body) => {
+        const parsed = OllamaResponseSchema.safeParse(body);
+        if (!parsed.success) {
+          throw new ReviewerOperationalError(
+            `${opts.label} reviewer response missing expected shape: ${parsed.error.message}`,
+          );
+        }
+        return parsed.data.message.content;
+      },
+    });
   }
-  let json: unknown;
-  try {
-    json = await res.json();
-  } catch {
-    throw new ReviewerOperationalError(`${opts.label} reviewer returned non-JSON response`);
-  }
-  const raw = opts.parseResponse(json);
-  return parseRawReview(stripJsonPayload(raw), opts.reviewerId, opts.label);
+
+  // openrouter
+  const base = (opts.config.endpoint ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
+  const endpoint = `${base}/chat/completions`;
+  const model = opts.config.model ?? "anthropic/claude-sonnet-4-6";
+  const apiKey = process.env["OPENROUTER_API_KEY"] ?? "";
+  return runHttpJsonReview({
+    reviewerId: opts.reviewerId,
+    endpoint,
+    model,
+    headers: {
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      "HTTP-Referer": "https://github.com/yannmenec/inspectrum",
+      "X-Title": "inspectrum",
+    },
+    systemPrompt: opts.systemPrompt,
+    userMessage: opts.userMessage,
+    timeoutMs: opts.timeoutMs,
+    label: opts.label,
+    parseResponse: (body) => {
+      const parsed = OpenRouterResponseSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new ReviewerOperationalError(
+          `${opts.label} reviewer response missing expected shape: ${parsed.error.message}`,
+        );
+      }
+      return parsed.data.choices[0]!.message.content;
+    },
+  });
 }
 
 async function runClaudeJsonReview(opts: {

@@ -16,7 +16,8 @@ export async function checkReviewer(id: string, config: ReviewerConfig): Promise
 
 function resolveHealthEndpoint(_id: string, config: ReviewerConfig): string {
   if (config.backend === "openrouter") {
-    return (config.endpoint ?? "").replace(/\/$/, "") + "/models";
+    const base = (config.endpoint ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
+    return `${base}/models`;
   }
   return config.endpoint ?? "";
 }

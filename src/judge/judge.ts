@@ -3,6 +3,7 @@ import {
   ReviewerOperationalError,
   resolveReviewerBackend,
   runBackendJsonReview,
+  runHttpBackendJsonReview,
 } from "../reviewers/common.js";
 import type { RawReview, Finding } from "../schemas.js";
 import type { Config } from "../config.js";
@@ -31,15 +32,18 @@ export async function runJudge(
     if (!reviewerConfig) throw new ReviewerOperationalError(`Judge reviewer "${judgeReviewerId}" not found in config`);
 
     const backend = resolveReviewerBackend(judgeReviewerId, reviewerConfig);
-    const review = await runBackendJsonReview({
-      backend,
+    const judgeOpts = {
       reviewerId: "judge",
       config: reviewerConfig,
       systemPrompt: JUDGE_SYSTEM_PROMPT,
       userMessage: buildJudgeMessage(plan, rawReviews),
       timeoutMs: config.limits.timeout_seconds * 1000,
       label: "Judge",
-    });
+    };
+    const review =
+      backend === "ollama" || backend === "openrouter"
+        ? await runHttpBackendJsonReview({ backend, ...judgeOpts })
+        : await runBackendJsonReview({ backend, ...judgeOpts });
     validateJudgeInvariants(review);
     return { review, status: "success" };
   } catch (err) {

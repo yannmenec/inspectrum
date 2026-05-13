@@ -57,11 +57,77 @@ describe("checkReviewer — HTTP", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns ok=false when no endpoint configured", () => {
+  it("returns ok=false when no endpoint configured (ollama)", () => {
     return expect(checkReviewer("ollama", { type: "http" })).resolves.toMatchObject({
       ok: false,
       reason: expect.stringMatching(/endpoint/i),
     });
+  });
+
+  it("provides install hint for ollama when binary missing", () => {
+    const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    // CLI ollama would use checkCli — test via installFix indirectly through a CLI config
+    vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
+    return expect(checkReviewer("ollama", { type: "cli", binary: "ollama" })).resolves.toMatchObject({
+      ok: false,
+      fix: expect.stringContaining("brew install ollama"),
+    });
+  });
+
+  it("provides install hint for kimi when binary missing", () => {
+    const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
+    return expect(checkReviewer("kimi", { type: "cli", binary: "kimi" })).resolves.toMatchObject({
+      ok: false,
+      fix: expect.stringContaining("@moonshotai/kimi-cli"),
+    });
+  });
+
+  it("provides install hint for qwen when binary missing", () => {
+    const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
+    return expect(checkReviewer("qwen", { type: "cli", binary: "qwen" })).resolves.toMatchObject({
+      ok: false,
+      fix: expect.stringContaining("@qwenlm/qwen-code"),
+    });
+  });
+
+  it("provides fix hint for openrouter (API key URL)", () => {
+    const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
+    return expect(checkReviewer("openrouter", { type: "cli", binary: "openrouter" })).resolves.toMatchObject({
+      ok: false,
+      fix: expect.stringContaining("openrouter.ai/keys"),
+    });
+  });
+
+  it("openrouter health check hits {endpoint}/models (explicit endpoint)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    await checkReviewer("openrouter", {
+      type: "http",
+      backend: "openrouter",
+      endpoint: "https://openrouter.ai/api/v1",
+    });
+    const url = vi.mocked(fetch).mock.calls[0]![0] as string;
+    expect(url).toBe("https://openrouter.ai/api/v1/models");
+  });
+
+  it("openrouter health check hits default /api/v1/models when endpoint absent", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    await checkReviewer("openrouter", { type: "http", backend: "openrouter" });
+    const url = vi.mocked(fetch).mock.calls[0]![0] as string;
+    expect(url).toBe("https://openrouter.ai/api/v1/models");
+  });
+
+  it("openrouter strips trailing slash before appending /models", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    await checkReviewer("openrouter", {
+      type: "http",
+      backend: "openrouter",
+      endpoint: "https://openrouter.ai/api/v1/",
+    });
+    const url = vi.mocked(fetch).mock.calls[0]![0] as string;
+    expect(url).toBe("https://openrouter.ai/api/v1/models");
   });
 
   it("returns ok=true when endpoint responds 200", async () => {

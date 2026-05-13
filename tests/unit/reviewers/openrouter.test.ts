@@ -228,6 +228,16 @@ describe("OpenRouterReviewer", () => {
     expect(headers["Authorization"]).toBeUndefined();
   });
 
+  it("omits Authorization header when OPENROUTER_API_KEY is empty string", async () => {
+    process.env["OPENROUTER_API_KEY"] = "";
+    mockFetchOk(JSON.stringify(validRawReviewNoFindings));
+    const reviewer = new OpenRouterReviewer("openrouter", cfg);
+    await reviewer.review("# Plan", "all");
+    const fetchCall = vi.mocked(fetch).mock.calls[0]!;
+    const headers = (fetchCall[1] as RequestInit).headers as Record<string, string>;
+    expect(headers["Authorization"]).toBeUndefined();
+  });
+
   it("sends HTTP-Referer and X-Title headers", async () => {
     mockFetchOk(JSON.stringify(validRawReviewNoFindings));
     const reviewer = new OpenRouterReviewer("openrouter", cfg);
