@@ -209,4 +209,22 @@ describe("GeminiReviewer", () => {
     expect(writeCall).toContain("CODEBASE CONTEXT:");
     expect(writeCall).toContain("some codebase context");
   });
+
+  it("merges non-reserved config.args into spawn argv without duplicating -m or -p", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    const cfgWithArgs: ReviewerConfig = {
+      type: "cli",
+      binary: "gemini",
+      model: "gemini-2.5-pro",
+      args: ["--temperature", "0.2", "-m", "ignored-model", "-p", "ignored-prompt"],
+    };
+    const reviewer = new GeminiReviewer("gemini", cfgWithArgs);
+    await reviewer.review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).toContain("--temperature");
+    expect(args[args.indexOf("--temperature") + 1]).toBe("0.2");
+    expect(args.filter((a) => a === "-m")).toHaveLength(1);
+    expect(args.filter((a) => a === "-p")).toHaveLength(1);
+    expect(args).not.toContain("ignored-prompt");
+  });
 });

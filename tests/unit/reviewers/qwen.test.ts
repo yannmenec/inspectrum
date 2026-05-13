@@ -193,4 +193,20 @@ describe("QwenReviewer", () => {
     expect(writeCall).toContain("CODEBASE CONTEXT:");
     expect(writeCall).toContain("some codebase context");
   });
+
+  it("merges non-reserved config.args into spawn argv", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    const cfgWithArgs: ReviewerConfig = {
+      type: "cli",
+      backend: "qwen",
+      model: "qwen3-235b-a22b",
+      args: ["--temperature", "0.4"],
+    };
+    const reviewer = new QwenReviewer("qwen", cfgWithArgs);
+    await reviewer.review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).toContain("--temperature");
+    expect(args[args.indexOf("--temperature") + 1]).toBe("0.4");
+    expect(args.filter((a) => a === "-m")).toHaveLength(1);
+  });
 });

@@ -9,7 +9,42 @@ import type { RawReview, ReviewerConfig } from "../schemas.js";
 export type ReviewerBackend = "claude" | "codex" | "gemini" | "ollama" | "openrouter" | "kimi" | "qwen";
 
 const PLAN_MAX_CHARS = 16000;
-const TRUNCATION_MARKER = "\n\n[...truncated]";
+export const TRUNCATION_MARKER = "\n\n[...truncated]";
+
+/**
+ * Filters user-provided CLI args (from ~/.inspectrum/config.toml) against a set of
+ * reserved flag names owned by the canonical reviewer invocation. Reserved flags
+ * (and their values, when in paired form "--flag value") are dropped so the
+ * canonical invocation stays authoritative. Inline form ("--flag=value") is also
+ * filtered. Non-reserved args are preserved in original order.
+ *
+ * Heuristic for value consumption: if the next argument exists and does not start
+ * with "-", treat it as the value of the reserved flag and drop it too. This
+ * handles both paired flags ("-m gpt-5") and bool flags ("-p") without requiring
+ * per-flag arity declarations.
+ */
+export function mergeReviewerArgs(
+  configArgs: string[] | undefined,
+  reserved: readonly string[],
+): string[] {
+  if (!configArgs || configArgs.length === 0) return [];
+  const reservedSet = new Set(reserved);
+  const out: string[] = [];
+  for (let i = 0; i < configArgs.length; i++) {
+    const arg = configArgs[i]!;
+    const eqIdx = arg.indexOf("=");
+    if (eqIdx > 0 && arg.startsWith("-") && reservedSet.has(arg.slice(0, eqIdx))) {
+      continue;
+    }
+    if (reservedSet.has(arg)) {
+      const next = configArgs[i + 1];
+      if (next !== undefined && !next.startsWith("-")) i += 1;
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
 
 export const RAW_REVIEW_JSON_SCHEMA = JSON.stringify({
   type: "object",
@@ -85,7 +120,7 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
   if (idBackend) return idBackend;
 
   throw new ReviewerOperationalError(
-    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen.`,
+    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, ollama (http), openrouter (http).`,
   );
 }
 
@@ -237,6 +272,8 @@ export async function runHttpBackendJsonReview(opts: {
   });
 }
 
+const CLAUDE_RESERVED = ["-p", "--print", "--append-system-prompt", "--json-schema", "--output-format"];
+
 async function runClaudeJsonReview(opts: {
   reviewerId: string;
   config: ReviewerConfig;
@@ -246,11 +283,12 @@ async function runClaudeJsonReview(opts: {
   label: string;
 }): Promise<RawReview> {
   const binary = opts.config.binary ?? "claude";
-  const extraArgs = opts.config.args ?? ["-p", "--output-format", "json", "--no-session-persistence"];
-  const baseArgs = extraArgs.filter((a) => a !== "-p" && a !== "--print");
+  const userArgs = mergeReviewerArgs(opts.config.args ?? ["--no-session-persistence"], CLAUDE_RESERVED);
   const args = [
     "-p",
-    ...baseArgs,
+    "--output-format",
+    "json",
+    ...userArgs,
     "--append-system-prompt",
     opts.systemPrompt,
     "--json-schema",
@@ -259,6 +297,8 @@ async function runClaudeJsonReview(opts: {
   const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
   return parseClaudeOutput(stdout, opts.reviewerId, opts.label);
 }
+
+const CODEX_RESERVED = ["exec", "--ephemeral", "-m", "--model", "--output-schema", "--output-last-message"];
 
 async function runCodexJsonReview(opts: {
   reviewerId: string;
@@ -276,6 +316,7 @@ async function runCodexJsonReview(opts: {
 
   try {
     writeFileSync(schemaFile, RAW_REVIEW_JSON_SCHEMA, { encoding: "utf8", mode: 0o600 });
+    const userArgs = mergeReviewerArgs(opts.config.args, CODEX_RESERVED);
     const args = [
       "exec",
       "--ephemeral",
@@ -285,6 +326,7 @@ async function runCodexJsonReview(opts: {
       schemaFile,
       "--output-last-message",
       outputFile,
+      ...userArgs,
       opts.systemPrompt,
     ];
     await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
@@ -293,6 +335,8 @@ async function runCodexJsonReview(opts: {
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
+
+const GEMINI_FAMILY_RESERVED = ["-m", "--model", "-p", "--prompt"];
 
 async function runGeminiJsonReview(opts: {
   reviewerId: string;
@@ -304,7 +348,8 @@ async function runGeminiJsonReview(opts: {
 }): Promise<RawReview> {
   const binary = opts.config.binary ?? "gemini";
   const model = extractModel(opts.config, "gemini-2.5-pro");
-  const args = ["-m", model, "-p", opts.systemPrompt + JSON_INSTRUCTION];
+  const userArgs = mergeReviewerArgs(opts.config.args, GEMINI_FAMILY_RESERVED);
+  const args = ["-m", model, ...userArgs, "-p", opts.systemPrompt + JSON_INSTRUCTION];
   const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
 }
@@ -324,7 +369,8 @@ async function runKimiJsonReview(opts: {
   // If actual CLI flags differ, update the args array below.
   const binary = opts.config.binary ?? "kimi";
   const model = extractModel(opts.config, "kimi-k2");
-  const args = ["-m", model, "-p", opts.systemPrompt + JSON_INSTRUCTION];
+  const userArgs = mergeReviewerArgs(opts.config.args, GEMINI_FAMILY_RESERVED);
+  const args = ["-m", model, ...userArgs, "-p", opts.systemPrompt + JSON_INSTRUCTION];
   const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
 }
@@ -344,7 +390,8 @@ async function runQwenJsonReview(opts: {
   // If actual CLI flags differ, update the args array below.
   const binary = opts.config.binary ?? "qwen";
   const model = extractModel(opts.config, "qwen3-235b-a22b");
-  const args = ["-m", model, "-p", opts.systemPrompt + JSON_INSTRUCTION];
+  const userArgs = mergeReviewerArgs(opts.config.args, GEMINI_FAMILY_RESERVED);
+  const args = ["-m", model, ...userArgs, "-p", opts.systemPrompt + JSON_INSTRUCTION];
   const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
 }

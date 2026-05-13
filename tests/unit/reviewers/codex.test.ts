@@ -218,4 +218,23 @@ describe("CodexReviewer", () => {
     expect(writeCall).toContain("CODEBASE CONTEXT:");
     expect(writeCall).toContain("some codebase context");
   });
+
+  it("merges non-reserved config.args into spawn argv between flags and positional prompt", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgWithArgs: ReviewerConfig = {
+      type: "cli",
+      backend: "codex",
+      model: "gpt-5",
+      args: ["--full-auto", "-m", "ignored-model"],
+    };
+    const reviewer = new CodexReviewer("codex", cfgWithArgs);
+    await reviewer.review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).toContain("--full-auto");
+    expect(args.filter((a) => a === "-m")).toHaveLength(1);
+    expect(args).not.toContain("ignored-model");
+    // Positional system prompt must stay last
+    expect(args[args.length - 1]).toContain("reviewer");
+  });
 });

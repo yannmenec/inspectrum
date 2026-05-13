@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { ReviewPlanInputSchema } from "../schemas.js";
 import { createReviewer } from "../reviewers/index.js";
+import { TRUNCATION_MARKER } from "../reviewers/common.js";
 import { writeSession } from "../session/store.js";
 import { runJudge } from "../judge/judge.js";
 import type { Config } from "../config.js";
 import type { Finding, RawReview, ReviewPlanOutput } from "../schemas.js";
 import type { JudgeResult } from "../judge/judge.js";
-
-const TRUNCATION_MARKER = "\n\n[...truncated]";
 
 export type OnProgress = (progress: number, total: number, message: string) => Promise<void>;
 

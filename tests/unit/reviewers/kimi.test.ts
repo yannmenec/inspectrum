@@ -193,4 +193,22 @@ describe("KimiReviewer", () => {
     expect(writeCall).toContain("CODEBASE CONTEXT:");
     expect(writeCall).toContain("some codebase context");
   });
+
+  it("merges non-reserved config.args into spawn argv", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    const cfgWithArgs: ReviewerConfig = {
+      type: "cli",
+      backend: "kimi",
+      model: "kimi-k2",
+      args: ["--temperature", "0.3", "--top-p=0.9"],
+    };
+    const reviewer = new KimiReviewer("kimi", cfgWithArgs);
+    await reviewer.review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).toContain("--temperature");
+    expect(args[args.indexOf("--temperature") + 1]).toBe("0.3");
+    expect(args).toContain("--top-p=0.9");
+    expect(args.filter((a) => a === "-m")).toHaveLength(1);
+    expect(args.filter((a) => a === "-p")).toHaveLength(1);
+  });
 });
