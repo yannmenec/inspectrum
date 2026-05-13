@@ -1,5 +1,8 @@
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 import { ClaudeReviewer } from "./claude.js";
+import { CodexReviewer } from "./codex.js";
+import { GeminiReviewer } from "./gemini.js";
+import { resolveReviewerBackend } from "./common.js";
 
 export interface Reviewer {
   id: string;
@@ -7,11 +10,14 @@ export interface Reviewer {
 }
 
 export function createReviewer(id: string, config: ReviewerConfig): Reviewer {
-  if (config.type === "cli" && (config.binary === "claude" || id === "claude")) {
+  const backend = resolveReviewerBackend(id, config);
+  if (backend === "claude") {
     return new ClaudeReviewer(id, config);
   }
-  // Stub for codex/gemini (J2)
-  throw new Error(`Reviewer backend "${id}" not yet implemented (coming in J2)`);
+  if (backend === "codex") {
+    return new CodexReviewer(id, config);
+  }
+  return new GeminiReviewer(id, config);
 }
 
-export { ClaudeReviewer };
+export { ClaudeReviewer, CodexReviewer, GeminiReviewer };

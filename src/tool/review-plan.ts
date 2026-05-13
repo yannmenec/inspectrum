@@ -2,13 +2,20 @@ import { randomUUID } from "node:crypto";
 import { ReviewPlanInputSchema } from "../schemas.js";
 import { createReviewer } from "../reviewers/index.js";
 import { writeSession } from "../session/store.js";
+import { runJudge } from "../judge/judge.js";
 import type { Config } from "../config.js";
 import type { Finding, RawReview, ReviewPlanOutput } from "../schemas.js";
+import type { JudgeResult } from "../judge/judge.js";
 
-const REPORT_MAX_CHARS = 8000;
 const TRUNCATION_MARKER = "\n\n[...truncated]";
 
-export async function reviewPlan(rawInput: unknown, config: Config): Promise<ReviewPlanOutput> {
+export type OnProgress = (progress: number, total: number, message: string) => Promise<void>;
+
+export async function reviewPlan(
+  rawInput: unknown,
+  config: Config,
+  onProgress?: OnProgress,
+): Promise<ReviewPlanOutput> {
   const input = ReviewPlanInputSchema.parse(rawInput);
   const startedAt = new Date().toISOString();
   const sessionId = randomUUID().replace(/-/g, "").slice(0, 8);
@@ -16,35 +23,69 @@ export async function reviewPlan(rawInput: unknown, config: Config): Promise<Rev
   const reviewerIds = input.reviewers ?? config.defaults.reviewers;
   if (reviewerIds.length === 0) throw new Error("No reviewers configured");
 
-  // Run all reviewers in parallel
-  const rawReviews = await Promise.all(
-    reviewerIds.map((id) => {
-      const reviewerConfig = config.reviewers[id] as NonNullable<(typeof config.reviewers)[string]> | undefined;
-      if (!reviewerConfig) throw new Error(`Reviewer "${id}" not found in config`);
-      const reviewer = createReviewer(id, reviewerConfig);
-      return reviewer.review(input.plan, input.focus, input.context);
+  const useJudge = input.judge && reviewerIds.length >= 2;
+
+  // Run all reviewers in parallel, collecting successes and failures
+  let completedReviewers = 0;
+  const settledResults = await Promise.allSettled(
+    reviewerIds.map(async (id) => {
+      try {
+        const reviewerConfig = config.reviewers[id] as NonNullable<(typeof config.reviewers)[string]> | undefined;
+        if (!reviewerConfig) throw new Error(`Reviewer "${id}" not found in config`);
+        const reviewer = createReviewer(id, reviewerConfig);
+        return await reviewer.review(input.plan, input.focus, input.context);
+      } finally {
+        completedReviewers += 1;
+        await onProgress?.(completedReviewers, reviewerIds.length, `${id} done`);
+      }
     }),
   );
 
-  // Aggregate findings
-  const allFindings: Finding[] = rawReviews.flatMap((r) => r.findings);
+  const successfulReviews: RawReview[] = [];
+  const operationalFindings: Finding[] = [];
+  for (const [i, r] of settledResults.entries()) {
+    if (r.status === "fulfilled") {
+      successfulReviews.push(r.value);
+    } else {
+      const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      operationalFindings.push({
+        severity: "major",
+        category: "risk",
+        reviewer: reviewerIds[i]!,
+        message: `Reviewer ${reviewerIds[i]} failed: ${errMsg}`,
+      });
+    }
+  }
 
-  // Determine verdict (most severe wins: reject > revise > approve)
-  const verdict = aggregateVerdict(rawReviews);
+  if (successfulReviews.length === 0) throw new Error("All reviewers failed");
+
+  // Run judge to consolidate if enabled and we have ≥ 2 successful reviews
+  let finalReviews = successfulReviews;
+  let judgeResult: JudgeResult | undefined;
+  if (useJudge && successfulReviews.length >= 2) {
+    judgeResult = await runJudge(successfulReviews, input.plan, config.defaults.judge, config);
+    finalReviews = [judgeResult.review];
+    await onProgress?.(reviewerIds.length + 1, reviewerIds.length + 1, "judge done");
+  }
+
+  const allFindings: Finding[] = [...operationalFindings, ...finalReviews.flatMap((r) => r.findings)];
+
+  // Determine verdict from successful reviews only — operational failures surface in the report
+  const verdict = aggregateVerdict(finalReviews);
 
   // Build report markdown
-  const reportMd = buildReport(rawReviews, verdict, sessionId);
+  const reportMd = buildReport(successfulReviews, judgeResult, operationalFindings, verdict, sessionId);
   const truncatedReport =
-    reportMd.length > REPORT_MAX_CHARS
-      ? reportMd.slice(0, REPORT_MAX_CHARS - TRUNCATION_MARKER.length) + TRUNCATION_MARKER
+    reportMd.length > config.limits.report_max_chars
+      ? reportMd.slice(0, config.limits.report_max_chars - TRUNCATION_MARKER.length) + TRUNCATION_MARKER
       : reportMd;
 
-  // Collect revised plan from first reviewer that produced one
-  const revisedPlan = rawReviews.find((r) => r.revised_plan)?.revised_plan;
+  // Collect revised plan from judge or first reviewer that produced one
+  const revisedPlan = (judgeResult?.review ?? successfulReviews.find((r) => r.revised_plan))?.revised_plan;
 
   // Write session
   const reviews: Record<string, string> = {};
-  for (const r of rawReviews) {
+  for (const r of successfulReviews) {
     reviews[r.reviewer] = formatRawReview(r);
   }
 
@@ -61,6 +102,8 @@ export async function reviewPlan(rawInput: unknown, config: Config): Promise<Rev
     duration_ms: Date.now() - new Date(startedAt).getTime(),
     reviewers: reviewerIds,
     judge: config.defaults.judge,
+    judge_status: judgeResult?.status ?? (useJudge ? ("skipped" as const) : undefined),
+    judge_error: judgeResult?.error,
     verdict,
     counts,
     plan_chars: input.plan.length,
@@ -73,6 +116,7 @@ export async function reviewPlan(rawInput: unknown, config: Config): Promise<Rev
     reviews,
     report: truncatedReport,
     revisedPlan,
+    judgeReview: judgeResult?.review,
   });
 
   return {
@@ -86,26 +130,44 @@ export async function reviewPlan(rawInput: unknown, config: Config): Promise<Rev
 }
 
 function aggregateVerdict(reviews: RawReview[]): "approve" | "revise" | "reject" {
-  if (reviews.some((r) => r.verdict === "reject")) return "reject";
-  if (reviews.some((r) => r.verdict === "revise")) return "revise";
+  const findings = reviews.flatMap((r) => r.findings);
+  if (reviews.some((r) => r.verdict === "reject") || findings.some((f) => f.severity === "blocker")) return "reject";
+  if (reviews.some((r) => r.verdict === "revise") || findings.some((f) => f.severity === "major")) return "revise";
   return "approve";
 }
 
-function buildReport(reviews: RawReview[], verdict: string, sessionId: string): string {
-  const allFindings = reviews.flatMap((r) => r.findings);
-  const reviewerList = reviews.map((r) => r.reviewer).join(", ");
+function buildReport(
+  rawReviews: RawReview[],
+  judgeResult: JudgeResult | undefined,
+  operationalFindings: Finding[],
+  verdict: string,
+  sessionId: string,
+): string {
+  const reviewFindings = judgeResult ? judgeResult.review.findings : rawReviews.flatMap((r) => r.findings);
+  const reviewerList = rawReviews.map((r) => r.reviewer).join(", ");
+  const judgeLabel = judgeResult
+    ? `  ·  Judge: ${judgeResult.status}${judgeResult.error ? ` (${judgeResult.error})` : ""}`
+    : "";
 
   const verdictBadge = verdict === "approve" ? "✅ APPROVE" : verdict === "revise" ? "⚠️ REVISE" : "❌ REJECT";
 
   const lines = [
     `# inspectrum Review — session ${sessionId}`,
     "",
-    `**Verdict: ${verdictBadge}**  ·  Reviewers: ${reviewerList}`,
+    `**Verdict: ${verdictBadge}**  ·  Reviewers: ${reviewerList}${judgeLabel}`,
     "",
   ];
 
+  if (operationalFindings.length > 0) {
+    lines.push(`## Operational Findings (${operationalFindings.length})`);
+    for (const f of operationalFindings) {
+      lines.push(`- **[${f.reviewer}]** ${f.message}`);
+    }
+    lines.push("");
+  }
+
   for (const sev of ["blocker", "major", "minor", "nit"] as const) {
-    const group = allFindings.filter((f) => f.severity === sev);
+    const group = reviewFindings.filter((f) => f.severity === sev);
     if (group.length === 0) continue;
     const label = sev.charAt(0).toUpperCase() + sev.slice(1) + "s";
     lines.push(`## ${label} (${group.length})`);
@@ -116,7 +178,7 @@ function buildReport(reviews: RawReview[], verdict: string, sessionId: string): 
     lines.push("");
   }
 
-  if (allFindings.length === 0) {
+  if (operationalFindings.length + reviewFindings.length === 0) {
     lines.push("No issues found.");
     lines.push("");
   }

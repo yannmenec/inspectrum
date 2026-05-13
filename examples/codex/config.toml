@@ -1,0 +1,14 @@
+# Codex Desktop MCP configuration
+# Copy to: ~/.codex/config.toml  (global — only location read by Codex 0.130+)
+# Docs: https://developers.openai.com/learn/docs-mcp
+#
+# Alternative via CLI (no file edit needed):
+#   codex mcp add inspectrum -- node /absolute/path/to/inspectrum/dist/server.js
+
+[mcp_servers.inspectrum]
+command = "node"
+args    = ["/absolute/path/to/inspectrum/dist/server.js"]
+
+# After `npm publish` (J7), replace with:
+# command = "npx"
+# args    = ["-y", "inspectrum@latest"]

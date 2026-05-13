@@ -1,12 +1,15 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { loadConfig } from "./config.js";
 import { reviewPlan } from "./tool/review-plan.js";
+import { listSessions, findSessionById, readSessionFile } from "./session/store.js";
+import { buildSessionsIndex, isSessionResourceFile, sessionFileMimeType, SESSION_RESOURCE_FILES } from "./session/resources.js";
 
 const server = new McpServer(
   { name: "inspectrum", version: "0.1.0" },
-  { capabilities: { tools: {} } },
+  { capabilities: { tools: {}, resources: {} } },
 );
 
 const config = loadConfig();
@@ -18,7 +21,7 @@ server.registerTool(
     description:
       "Review a development/architecture plan with peer LLMs and return a consolidated verdict " +
       "(approve | revise | reject) with prioritized findings. " +
-      "Writes a session log to ~/.inspectrum/sessions/.",
+      "Read-only, writes a session log to ~/.inspectrum/sessions/.",
     inputSchema: {
       plan: z
         .string()
@@ -49,9 +52,18 @@ server.registerTool(
       openWorldHint: true,
     },
   },
-  async (params) => {
+  async (params, extra) => {
     try {
-      const result = await reviewPlan(params, config);
+      // _meta is the MCP SDK's escape hatch for client-sent metadata not yet in the typed API
+      const progressToken = extra._meta?.progressToken;
+      const onProgress = async (progress: number, total: number, message: string): Promise<void> => {
+        if (progressToken === undefined) return;
+        await extra.sendNotification({
+          method: "notifications/progress",
+          params: { progressToken, progress, total, message },
+        });
+      };
+      const result = await reviewPlan(params, config, onProgress);
 
       const jsonBlock = [
         "",
@@ -81,6 +93,51 @@ server.registerTool(
         isError: true,
       };
     }
+  },
+);
+
+// Resource: list all sessions
+server.resource("sessions", "inspectrum://sessions", async () => {
+  const sessions = await listSessions();
+  return {
+    contents: [{
+      uri: "inspectrum://sessions",
+      text: buildSessionsIndex(sessions),
+      mimeType: "application/json",
+    }],
+  };
+});
+
+// Resource template: individual session file
+server.resource(
+  "session-file",
+  // The SDK requires the list property to be present; undefined makes this template non-listing.
+  new ResourceTemplate("inspectrum://sessions/{id}/{file}", { list: undefined }),
+  async (uri, { id, file }) => {
+    const fileStr = String(file);
+    if (!isSessionResourceFile(fileStr)) {
+      throw new McpError(ErrorCode.InvalidRequest, `Invalid file: ${fileStr}. Allowed: ${SESSION_RESOURCE_FILES.join(", ")}`);
+    }
+
+    const sessionPath = await findSessionById(String(id));
+    if (!sessionPath) {
+      throw new McpError(ErrorCode.InvalidRequest, `Session ${id} not found`);
+    }
+
+    const content = await readSessionFile(sessionPath, fileStr);
+    if (content === null) {
+      throw new McpError(ErrorCode.InvalidRequest, `File not found: ${fileStr}`);
+    }
+
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          text: content,
+          mimeType: sessionFileMimeType(fileStr),
+        },
+      ],
+    };
   },
 );
 

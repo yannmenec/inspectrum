@@ -7,7 +7,7 @@ import {
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 import type { Reviewer } from "./index.js";
 
-export class ClaudeReviewer implements Reviewer {
+export class GeminiReviewer implements Reviewer {
   constructor(
     public readonly id: string,
     private readonly config: ReviewerConfig,
@@ -16,13 +16,13 @@ export class ClaudeReviewer implements Reviewer {
 
   async review(plan: string, focus: string, context?: string): Promise<RawReview> {
     return runBackendJsonReview({
-      backend: "claude",
+      backend: "gemini",
       reviewerId: this.id,
       config: this.config,
       systemPrompt: REVIEWER_SYSTEM_PROMPT,
       userMessage: buildUserMessage(this.id, truncatePlan(plan), focus, context),
       timeoutMs: this.timeoutMs,
-      label: "Claude",
+      label: "Gemini",
     });
   }
 }

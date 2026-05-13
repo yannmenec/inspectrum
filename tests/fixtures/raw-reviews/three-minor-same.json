@@ -1,0 +1,41 @@
+[
+  {
+    "reviewer": "claude",
+    "verdict": "revise",
+    "summary": "Variable naming inconsistency.",
+    "findings": [
+      {
+        "severity": "minor",
+        "category": "clarity",
+        "reviewer": "claude",
+        "message": "Variable names mix camelCase and snake_case inconsistently"
+      }
+    ]
+  },
+  {
+    "reviewer": "codex",
+    "verdict": "revise",
+    "summary": "Same naming issue.",
+    "findings": [
+      {
+        "severity": "minor",
+        "category": "clarity",
+        "reviewer": "codex",
+        "message": "Variable names mix camelCase and snake_case inconsistently"
+      }
+    ]
+  },
+  {
+    "reviewer": "gemini",
+    "verdict": "revise",
+    "summary": "Naming convention inconsistent.",
+    "findings": [
+      {
+        "severity": "minor",
+        "category": "clarity",
+        "reviewer": "gemini",
+        "message": "Variable names mix camelCase and snake_case inconsistently"
+      }
+    ]
+  }
+]

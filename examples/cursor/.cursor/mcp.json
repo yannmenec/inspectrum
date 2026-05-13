@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "inspectrum": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/inspectrum/dist/server.js"]
+    }
+  }
+}

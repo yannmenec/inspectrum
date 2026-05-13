@@ -1,0 +1,5 @@
+{
+  "verdict": "reject",
+  "min_findings": 1,
+  "expected_categories": ["correctness", "risk"]
+}

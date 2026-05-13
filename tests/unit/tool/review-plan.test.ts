@@ -8,11 +8,17 @@ vi.mock("../../../src/reviewers/index.js", () => ({
   ClaudeReviewer: class {},
 }));
 
+vi.mock("../../../src/judge/judge.js", () => ({
+  runJudge: vi.fn(),
+}));
+
 import { createReviewer } from "../../../src/reviewers/index.js";
+import { runJudge } from "../../../src/judge/judge.js";
 import { reviewPlan } from "../../../src/tool/review-plan.js";
 import type { Config } from "../../../src/config.js";
 
 const mockCreateReviewer = vi.mocked(createReviewer);
+const mockRunJudge = vi.mocked(runJudge);
 
 function makeConfig(sessionsDir: string): Config {
   return {
@@ -92,14 +98,14 @@ describe("reviewPlan", () => {
         codex: { type: "cli", binary: "codex" },
       },
     };
-    const result = await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"] }, cfg);
+    const result = await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: false }, cfg);
     expect(result.verdict).toBe("reject");
   });
 
-  it("throws when reviewer ID not in config", async () => {
+  it("throws 'All reviewers failed' when sole reviewer is not in config", async () => {
     await expect(
       reviewPlan({ plan: "# Plan", reviewers: ["nonexistent"] }, makeConfig(tmpDir)),
-    ).rejects.toThrow(/not found in config/i);
+    ).rejects.toThrow(/all reviewers failed/i);
   });
 
   it("throws when no reviewers configured", async () => {
@@ -139,5 +145,202 @@ describe("reviewPlan", () => {
     mockCreateReviewer.mockReturnValue(makeReviewerMock("approve", []));
     const result = await reviewPlan({ plan: "# Plan" }, makeConfig(tmpDir));
     expect(result.report_markdown).toContain("No issues found");
+  });
+
+  it("failed reviewer produces operational finding instead of throwing", async () => {
+    mockCreateReviewer
+      .mockReturnValueOnce({ id: "claude", review: vi.fn().mockRejectedValue(new Error("timeout")) })
+      .mockReturnValueOnce(makeReviewerMock("approve"));
+
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" },
+      reviewers: {
+        claude: { type: "cli", binary: "claude" },
+        codex: { type: "cli", binary: "codex" },
+      },
+    };
+    mockRunJudge.mockResolvedValue({
+      review: { reviewer: "judge", verdict: "approve", findings: [], summary: "" },
+      status: "success",
+    });
+    const result = await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: false }, cfg);
+    // Verdict reflects only successful reviewers — operational failures surface in findings/report, not verdict
+    expect(result.verdict).toBe("approve");
+    expect(result.findings.some((f) => f.message.includes("timeout"))).toBe(true);
+    expect(result.findings.some((f) => f.severity === "major" && f.category === "risk")).toBe(true);
+    expect(result.report_markdown).toContain("Reviewer claude failed: timeout");
+  });
+
+  it("onProgress called once per reviewer when judge=false", async () => {
+    mockCreateReviewer.mockReturnValue(makeReviewerMock("approve"));
+    const calls: [number, number, string][] = [];
+    const onProgress = vi.fn(async (p: number, t: number, m: string) => { calls.push([p, t, m]); });
+
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude"], judge: "claude", focus: "all" },
+      reviewers: { claude: { type: "cli", binary: "claude" } },
+    };
+    await reviewPlan({ plan: "# Plan", judge: false }, cfg, onProgress);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual([1, 1, "claude done"]);
+  });
+
+  it("onProgress called N+1 times with judge=true and ≥2 reviewers", async () => {
+    mockCreateReviewer
+      .mockReturnValueOnce(makeReviewerMock("approve"))
+      .mockReturnValueOnce(makeReviewerMock("approve"));
+    mockRunJudge.mockResolvedValue({
+      review: {
+        reviewer: "judge",
+        verdict: "approve",
+        findings: [],
+        summary: "All good.",
+      },
+      status: "success",
+    });
+
+    const calls: [number, number, string][] = [];
+    const onProgress = vi.fn(async (p: number, t: number, m: string) => { calls.push([p, t, m]); });
+
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" },
+      reviewers: {
+        claude: { type: "cli", binary: "claude" },
+        codex: { type: "cli", binary: "codex" },
+      },
+    };
+    await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: true }, cfg, onProgress);
+
+    expect(calls).toHaveLength(3); // 2 reviewers + 1 judge
+    expect(calls[2]).toEqual([3, 3, "judge done"]);
+  });
+
+  it("onProgress total = reviewers.length + 1 when judge active", async () => {
+    mockCreateReviewer
+      .mockReturnValueOnce(makeReviewerMock("approve"))
+      .mockReturnValueOnce(makeReviewerMock("approve"));
+    mockRunJudge.mockResolvedValue({
+      review: {
+        reviewer: "judge",
+        verdict: "approve",
+        findings: [],
+      },
+      status: "success",
+    });
+
+    const totals: number[] = [];
+    const onProgress = vi.fn(async (_p: number, t: number) => { totals.push(t); });
+
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" },
+      reviewers: {
+        claude: { type: "cli", binary: "claude" },
+        codex: { type: "cli", binary: "codex" },
+      },
+    };
+    await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: true }, cfg, onProgress);
+
+    expect(totals).toEqual([2, 2, 3]);
+  });
+
+  it("judge branch activated when judge=true with ≥2 successful reviews", async () => {
+    mockCreateReviewer
+      .mockReturnValueOnce(makeReviewerMock("approve"))
+      .mockReturnValueOnce(makeReviewerMock("revise"));
+    mockRunJudge.mockResolvedValue({
+      review: {
+        reviewer: "judge",
+        verdict: "approve",
+        findings: [],
+      },
+      status: "success",
+    });
+
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" },
+      reviewers: {
+        claude: { type: "cli", binary: "claude" },
+        codex: { type: "cli", binary: "codex" },
+      },
+    };
+    await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: true }, cfg);
+
+    expect(mockRunJudge).toHaveBeenCalledOnce();
+  });
+
+  it("does not leave progress incomplete when judge is skipped after reviewer failure", async () => {
+    mockCreateReviewer
+      .mockReturnValueOnce(makeReviewerMock("approve"))
+      .mockReturnValueOnce({ id: "codex", review: vi.fn().mockRejectedValue(new Error("timeout")) });
+
+    const calls: [number, number, string][] = [];
+    const onProgress = vi.fn(async (p: number, t: number, m: string) => { calls.push([p, t, m]); });
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" },
+      reviewers: {
+        claude: { type: "cli", binary: "claude" },
+        codex: { type: "cli", binary: "codex" },
+      },
+    };
+
+    await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: true }, cfg, onProgress);
+
+    expect(mockRunJudge).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(2);
+    expect(calls.every(([, total]) => total === 2)).toBe(true);
+  });
+
+  it("labels judge fallback in the report and session output", async () => {
+    mockCreateReviewer
+      .mockReturnValueOnce(makeReviewerMock("approve"))
+      .mockReturnValueOnce(makeReviewerMock("approve"));
+    mockRunJudge.mockResolvedValue({
+      review: {
+        reviewer: "judge",
+        verdict: "approve",
+        findings: [],
+        summary: "Judge failed; raw reviews concatenated.",
+      },
+      status: "fallback",
+      error: "Judge returned invalid JSON",
+    });
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" },
+      reviewers: {
+        claude: { type: "cli", binary: "claude" },
+        codex: { type: "cli", binary: "codex" },
+      },
+    };
+
+    const result = await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: true }, cfg);
+
+    expect(result.report_markdown).toContain("Judge: fallback");
+    expect(result.report_markdown).toContain("Judge returned invalid JSON");
+  });
+
+  it("judge NOT activated when judge=false", async () => {
+    mockCreateReviewer
+      .mockReturnValueOnce(makeReviewerMock("approve"))
+      .mockReturnValueOnce(makeReviewerMock("approve"));
+
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" },
+      reviewers: {
+        claude: { type: "cli", binary: "claude" },
+        codex: { type: "cli", binary: "codex" },
+      },
+    };
+    await reviewPlan({ plan: "# Plan", reviewers: ["claude", "codex"], judge: false }, cfg);
+
+    expect(mockRunJudge).not.toHaveBeenCalled();
   });
 });

@@ -37,6 +37,12 @@ const validRawReview = {
   summary: "Looks good.",
 };
 
+const validRawReviewWithFinding = {
+  verdict: "revise",
+  findings: [{ severity: "major", category: "completeness", reviewer: "model-said-this", message: "Missing rollback." }],
+  summary: "Needs work.",
+};
+
 describe("ClaudeReviewer", () => {
   beforeEach(() => vi.resetAllMocks());
 
@@ -56,7 +62,7 @@ describe("ClaudeReviewer", () => {
       is_error: true,
       result: "Failed to authenticate.",
     });
-    mockSpawn.mockReturnValue(makeMockProcess(envelope, "", 1));
+    mockSpawn.mockReturnValue(makeMockProcess(envelope));
     const reviewer = new ClaudeReviewer("claude", cfg);
     await expect(reviewer.review("# Plan", "all")).rejects.toThrow(/authenticate/i);
   });
@@ -72,6 +78,13 @@ describe("ClaudeReviewer", () => {
     mockSpawn.mockReturnValue(makeMockProcess(validClaudeEnvelope(badInner)));
     const reviewer = new ClaudeReviewer("claude", cfg);
     await expect(reviewer.review("# Plan", "all")).rejects.toThrow();
+  });
+
+  it("normalizes findings[].reviewer to wrapper id", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(validClaudeEnvelope(validRawReviewWithFinding)));
+    const reviewer = new ClaudeReviewer("my-claude", cfg);
+    const result = await reviewer.review("# Plan", "all");
+    expect(result.findings[0]!.reviewer).toBe("my-claude");
   });
 
   it("truncates plan at 16000 chars before sending", async () => {

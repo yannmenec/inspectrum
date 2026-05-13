@@ -81,6 +81,30 @@ describe("writeSession", () => {
     expect(existsSync(join(sessionPath, "review-claude.md"))).toBe(true);
     expect(existsSync(join(sessionPath, "review-gemini.md"))).toBe(true);
   });
+
+  it("rejects reviewer ids that cannot be used safely in filenames", async () => {
+    await expect(
+      writeSession({
+        session: sampleSession,
+        planInput: "# Plan",
+        reviews: { "../escape": "bad" },
+        report: "# Report",
+        baseDir: tmpDir,
+      }),
+    ).rejects.toThrow(/invalid reviewer id/i);
+  });
+
+  it("leaves no temporary session directory after a successful atomic write", async () => {
+    const { sessionPath } = await writeSession({
+      session: sampleSession,
+      planInput: "# Plan",
+      reviews: { claude: "OK" },
+      report: "# Report",
+      baseDir: tmpDir,
+    });
+    const { readdirSync } = await import("node:fs");
+    expect(readdirSync(tmpDir).some((entry) => entry.startsWith(sessionPath.split("/").pop()!) && entry.includes(".tmp"))).toBe(false);
+  });
 });
 
 describe("readSessionFile", () => {
@@ -98,6 +122,18 @@ describe("readSessionFile", () => {
 
   it("returns null for non-existent file", async () => {
     const content = await readSessionFile("/nonexistent/path", "file.md");
+    expect(content).toBeNull();
+  });
+
+  it("refuses path traversal outside the session directory", async () => {
+    const { sessionPath } = await writeSession({
+      session: sampleSession,
+      planInput: "# The Plan",
+      reviews: { claude: "review content" },
+      report: "# Report\nDone.",
+      baseDir: tmpDir,
+    });
+    const content = await readSessionFile(sessionPath, "../session.json");
     expect(content).toBeNull();
   });
 });

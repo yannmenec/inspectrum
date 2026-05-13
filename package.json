@@ -1,10 +1,10 @@
 {
   "name": "inspectrum",
   "version": "0.1.0",
-  "description": "Universal MCP server for multi-LLM plan, code, and PR review",
+  "description": "Universal MCP server for multi-LLM plan review",
   "type": "module",
   "bin": {
-    "inspectrum": "./dist/server.js"
+    "inspectrum": "./dist/cli.js"
   },
   "main": "./dist/server.js",
   "scripts": {
@@ -16,7 +16,6 @@
   "keywords": [
     "mcp",
     "plan-review",
-    "code-review",
     "llm",
     "claude",
     "codex",

@@ -1,0 +1,28 @@
+[
+  {
+    "reviewer": "claude",
+    "verdict": "revise",
+    "summary": "Missing rollback strategy.",
+    "findings": [
+      {
+        "severity": "major",
+        "category": "risk",
+        "reviewer": "claude",
+        "message": "No rollback plan if migration fails mid-way"
+      }
+    ]
+  },
+  {
+    "reviewer": "codex",
+    "verdict": "revise",
+    "summary": "Schema change lacks index.",
+    "findings": [
+      {
+        "severity": "major",
+        "category": "correctness",
+        "reviewer": "codex",
+        "message": "New foreign key column missing index — will cause slow queries at scale"
+      }
+    ]
+  }
+]

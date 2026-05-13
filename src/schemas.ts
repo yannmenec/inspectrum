@@ -42,6 +42,7 @@ export const ClaudeEnvelopeSchema = z.object({
 
 export const ReviewerConfigSchema = z.object({
   type: z.enum(["cli", "http"]),
+  backend: z.enum(["claude", "codex", "gemini"]).optional(),
   binary: z.string().optional(),
   args: z.array(z.string()).optional(),
   endpoint: z.string().optional(),

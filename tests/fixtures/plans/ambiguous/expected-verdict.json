@@ -1,0 +1,5 @@
+{
+  "verdict": "revise",
+  "min_findings": 1,
+  "expected_categories": ["completeness", "clarity"]
+}

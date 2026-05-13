@@ -1,0 +1,30 @@
+[
+  {
+    "reviewer": "claude",
+    "verdict": "reject",
+    "summary": "Critical data loss issue with no backup strategy.",
+    "findings": [
+      {
+        "severity": "blocker",
+        "category": "risk",
+        "reviewer": "claude",
+        "message": "No database backup before migration runs — data loss risk",
+        "suggested_fix": "Add pg_dump snapshot before running migration"
+      }
+    ]
+  },
+  {
+    "reviewer": "codex",
+    "verdict": "reject",
+    "summary": "Migration lacks backup, high data loss risk.",
+    "findings": [
+      {
+        "severity": "blocker",
+        "category": "risk",
+        "reviewer": "codex",
+        "message": "No database backup before migration runs — data loss risk",
+        "suggested_fix": "Add pg_dump snapshot before running migration"
+      }
+    ]
+  }
+]
