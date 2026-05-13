@@ -52,7 +52,8 @@ describe("runDoctor", () => {
       output += String(s);
       return true;
     });
-    // Default: sessions dir writable, all reviewers ok
+    // Default: config file present, sessions dir writable, all reviewers ok
+    mockFs.existsSync.mockReturnValue(true);
     mockFs.mkdirSync.mockReturnValue(undefined);
     mockFs.accessSync.mockReturnValue(undefined);
     mockCheckReviewer.mockResolvedValue({ ok: true });
@@ -137,6 +138,7 @@ describe("runDoctor", () => {
   it("handles multiple reviewers — partial failure returns false", async () => {
     mockLoadConfig.mockReturnValue({
       ...HEALTHY_CONFIG,
+      defaults: { reviewers: ["claude", "codex"], judge: "claude", focus: "all" as const },
       reviewers: {
         claude: { type: "cli" as const, binary: "claude" },
         codex: { type: "cli" as const, binary: "codex" },
@@ -150,6 +152,101 @@ describe("runDoctor", () => {
 
     expect(result).toBe(false);
     expect(mockCheckReviewer).toHaveBeenCalledTimes(2);
+  });
+
+  it("scopes failure to active reviewers only — optional reviewer missing does not toggle allOk", async () => {
+    // defaults.reviewers = ["claude"] (single, no judge requirement);
+    // codex/gemini are configured but inactive.
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      defaults: { reviewers: ["claude"], judge: "claude", focus: "all" as const },
+      reviewers: {
+        claude: { type: "cli" as const, binary: "claude" },
+        codex: { type: "cli" as const, binary: "codex" },
+        gemini: { type: "cli" as const, binary: "gemini" },
+      },
+    });
+    mockCheckReviewer.mockImplementation(async (id: string) => {
+      if (id === "claude") return { ok: true };
+      return { ok: false, reason: `${id} not found` };
+    });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(true);
+    expect(output).toContain("Optional reviewers");
+    expect(output).toContain("codex not found");
+    expect(output).toContain("gemini not found");
+  });
+
+  it("requires judge as active when defaults.reviewers >= 2", async () => {
+    // defaults.reviewers has 2 entries; judge is "claude" which is also one of them.
+    // But if judge is a different id that's missing, it should fail.
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      defaults: { reviewers: ["codex", "gemini"], judge: "claude", focus: "all" as const },
+      reviewers: {
+        claude: { type: "cli" as const, binary: "claude" },
+        codex: { type: "cli" as const, binary: "codex" },
+        gemini: { type: "cli" as const, binary: "gemini" },
+      },
+    });
+    mockCheckReviewer.mockImplementation(async (id: string) => {
+      if (id === "claude") return { ok: false, reason: "claude missing" };
+      return { ok: true };
+    });
+
+    const result = await runDoctor();
+
+    // claude is active (as judge) and missing → allOk false
+    expect(result).toBe(false);
+    expect(output).toContain("claude missing");
+  });
+
+  it("does NOT require judge when defaults.reviewers has only 1 entry", async () => {
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      defaults: { reviewers: ["codex"], judge: "claude", focus: "all" as const },
+      reviewers: {
+        claude: { type: "cli" as const, binary: "claude" },
+        codex: { type: "cli" as const, binary: "codex" },
+      },
+    });
+    mockCheckReviewer.mockImplementation(async (id: string) => {
+      if (id === "codex") return { ok: true };
+      // claude (judge) is missing but inactive when reviewer count == 1
+      return { ok: false, reason: `${id} missing` };
+    });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(true);
+  });
+
+  it("prints 'no config file (defaults applied)' when config file absent", async () => {
+    mockFs.existsSync.mockReturnValue(false);
+    mockLoadConfig.mockReturnValue(HEALTHY_CONFIG);
+
+    const result = await runDoctor();
+
+    expect(result).toBe(true);
+    expect(output).toContain("no config file");
+    expect(output).toContain("defaults applied");
+  });
+
+  it("fails when defaults.reviewers references an id with no config entry", async () => {
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      defaults: { reviewers: ["mystery-reviewer"], judge: "claude", focus: "all" as const },
+      reviewers: {
+        claude: { type: "cli" as const, binary: "claude" },
+      },
+    });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(false);
+    expect(output).toContain("no active reviewer config");
   });
 
   it("passes custom configPath to loadConfig", async () => {

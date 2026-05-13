@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("node:child_process");
 
@@ -53,8 +53,21 @@ describe("checkReviewer — CLI", () => {
 });
 
 describe("checkReviewer — HTTP", () => {
+  const prevApiKey = process.env["OPENROUTER_API_KEY"];
+
   beforeEach(() => {
     vi.unstubAllGlobals();
+    // Default: assume an API key is set so existing http probes run. Per-test code
+    // can delete it to exercise the missing-key path.
+    process.env["OPENROUTER_API_KEY"] = "test-key";
+  });
+
+  afterEach(() => {
+    if (prevApiKey === undefined) {
+      delete process.env["OPENROUTER_API_KEY"];
+    } else {
+      process.env["OPENROUTER_API_KEY"] = prevApiKey;
+    }
   });
 
   it("returns ok=false when no endpoint configured (ollama)", () => {
@@ -62,6 +75,13 @@ describe("checkReviewer — HTTP", () => {
       ok: false,
       reason: expect.stringMatching(/endpoint/i),
     });
+  });
+
+  it("returns ok=false with specific reason when openrouter active and OPENROUTER_API_KEY missing", async () => {
+    delete process.env["OPENROUTER_API_KEY"];
+    const result = await checkReviewer("openrouter", { type: "http", backend: "openrouter" });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("OPENROUTER_API_KEY not set");
   });
 
   it("ollama health check uses default endpoint when backend is explicit", async () => {

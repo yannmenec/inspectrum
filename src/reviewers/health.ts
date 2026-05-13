@@ -9,6 +9,13 @@ export interface HealthResult {
 
 export async function checkReviewer(id: string, config: ReviewerConfig): Promise<HealthResult> {
   if (config.type === "http") {
+    if (config.backend === "openrouter" && !process.env["OPENROUTER_API_KEY"]) {
+      return {
+        ok: false,
+        reason: "OPENROUTER_API_KEY not set",
+        fix: installFix("openrouter"),
+      };
+    }
     return checkHttp(resolveHealthEndpoint(id, config));
   }
   return checkCli(id, config.binary ?? id);
@@ -27,7 +34,12 @@ function resolveHealthEndpoint(_id: string, config: ReviewerConfig): string {
 
 function checkCli(id: string, binary: string): HealthResult {
   try {
-    execFileSync(binary, ["--version"], { timeout: 5000, encoding: "utf8" });
+    // stdio: ignore stderr — some CLIs (e.g. codex) print noise on --version
+    execFileSync(binary, ["--version"], {
+      timeout: 5000,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
     return { ok: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

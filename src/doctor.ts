@@ -36,9 +36,14 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
   // 1 — Config
   section("Config");
   const resolvedPath = configPath ?? getConfigPath();
+  const configFilePresent = fs.existsSync(resolvedPath);
   try {
     config = loadConfig(configPath);
-    pass(`${resolvedPath} — valid`);
+    if (configFilePresent) {
+      pass(`${resolvedPath} — valid`);
+    } else {
+      pass(`no config file (defaults applied)`);
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     failMsg(`${resolvedPath} — ${msg}`);
@@ -64,7 +69,19 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
   if (configLoadFailed) {
     process.stdout.write(`  (skipped — fix config errors above first)\n`);
   } else {
-    for (const [id, reviewerConfig] of Object.entries(config.reviewers)) {
+    const activeIds = new Set<string>(config.defaults.reviewers);
+    // Judge only runs when ≥ 2 reviewers — only require it as active in that case.
+    if (config.defaults.reviewers.length >= 2) activeIds.add(config.defaults.judge);
+
+    const allEntries = Object.entries(config.reviewers);
+    const activeEntries = allEntries.filter(([id]) => activeIds.has(id));
+    const optionalEntries = allEntries.filter(([id]) => !activeIds.has(id));
+
+    if (activeEntries.length === 0) {
+      failMsg(`no active reviewer config found for defaults.reviewers=${JSON.stringify(config.defaults.reviewers)}`);
+      allOk = false;
+    }
+    for (const [id, reviewerConfig] of activeEntries) {
       const result = await checkReviewer(id, reviewerConfig);
       if (result.ok) {
         pass(id);
@@ -72,6 +89,20 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
         failMsg(`${id}${result.reason ? ` — ${result.reason}` : ""}`);
         if (result.fix) hint(`Fix: ${result.fix}`);
         allOk = false;
+      }
+    }
+
+    if (optionalEntries.length > 0) {
+      section("Optional reviewers");
+      for (const [id, reviewerConfig] of optionalEntries) {
+        const result = await checkReviewer(id, reviewerConfig);
+        if (result.ok) {
+          pass(id);
+        } else {
+          // Optional: print status but do NOT toggle allOk.
+          process.stdout.write(`  ${R}○${Z} ${id}${result.reason ? ` — ${result.reason}` : ""}\n`);
+          if (result.fix) hint(`Fix: ${result.fix}`);
+        }
       }
     }
   }
