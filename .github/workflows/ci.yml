@@ -31,8 +31,11 @@ jobs:
       - name: Lint
         run: npx eslint src/
 
+      - name: Build
+        run: npm run build
+
       - name: Test (coverage gate)
         run: npm run test:coverage
 
-      - name: Build
-        run: npm run build
+      - name: Test (e2e MCP stdio)
+        run: npm run test:e2e

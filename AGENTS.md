@@ -40,7 +40,7 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 - `src/judge/judge.ts` — consolidation pass with `validateJudgeInvariants`.
 - `src/prompts/index.ts` — `REVIEWER_SYSTEM_PROMPT`, `JUDGE_SYSTEM_PROMPT` as inline TS strings, NOT loaded from `.md`.
 - `src/session/{store,resources}.ts` — flat-file persistence + MCP resource exposure.
-- `tests/{contract,unit,integration,e2e}/` — Vitest. Fixtures under `tests/fixtures/`.
+- `tests/{contract,unit,e2e}/` — Vitest. Fixtures under `tests/fixtures/`. (`integration/` deferred — see `_decisions/ADR-0001-defer-integration-tests.md`.)
 
 ## Testing
 
@@ -48,7 +48,7 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 - Contract tests in `tests/contract/` lock the MCP tool I/O shape — do not relax their assertions to make a change land.
 - Unit tests mock `node:child_process` (vitest mocks) and HTTP via `nock`.
 - Canonical plans live in `tests/fixtures/plans/`. Snapshot reports under `tests/fixtures/reports/`.
-- Coverage gate (`vitest.config.ts`): ≥ 90 % lines, ≥ 90 % functions, ≥ 85 % branches on `src/tool/**`, `src/reviewers/**`, `src/judge/**`, `src/config.ts`. Do not lower these.
+- Coverage gate (`vitest.config.ts`): ≥ 90 % lines, ≥ 90 % functions, ≥ 90 % branches on `src/tool/**`, `src/reviewers/**`, `src/judge/**`, `src/config.ts`, `src/doctor.ts`, `src/server/**`, `src/session/**`. Do not lower these.
 - Never commit failing tests; the pre-commit hook will block.
 
 ## Architecture invariants
