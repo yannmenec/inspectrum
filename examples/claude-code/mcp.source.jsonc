@@ -1,0 +1,17 @@
+// Source-install variant of mcp.json for contributors who clone the repo
+// instead of using the published npm package.
+//
+// Copy this to .mcp.json at your project root and replace the absolute
+// path below with the path to your cloned inspectrum.
+//
+// Claude Code accepts JSONC (JSON with comments) for .mcp.json; Cursor
+// does NOT — for Cursor, use the prose instructions in CONTRIBUTING.md.
+{
+  "mcpServers": {
+    "inspectrum": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/inspectrum/dist/server.js"]
+    }
+  }
+}

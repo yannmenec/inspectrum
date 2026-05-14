@@ -2,8 +2,8 @@
   "mcpServers": {
     "inspectrum": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/absolute/path/to/inspectrum/dist/server.js"]
+      "command": "npx",
+      "args": ["-y", "inspectrum@latest"]
     }
   }
 }

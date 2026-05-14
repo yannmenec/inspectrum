@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  pack:
+    name: Pack and upload tarball
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate tarball contents
+        run: npm pack --dry-run --json
+
+      - name: Pack
+        id: pack
+        run: |
+          npm pack
+          echo "tarball=$(ls inspectrum-*.tgz)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.tarball }}
+          path: ${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+
+      # Intentional: this workflow does NOT run `npm publish`. The owner runs
+      # `npm publish --access public` manually after reviewing the tarball.

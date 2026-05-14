@@ -11,12 +11,74 @@
 ```bash
 npm install            # install all dependencies
 npm run dev            # start MCP server with tsx hot-reload (no build step)
-npm test               # run all tests once
-npm run test:coverage  # tests + coverage report (gates: ≥ 90% lines/functions/branches)
+npm test               # run unit + contract tests once
+npm run test:e2e       # build, then run the e2e MCP stdio suite
+npm run test:coverage  # tests + coverage report (gate: ≥ 90% on the scopes in vitest.config.ts)
 npm run build          # compile TypeScript → dist/
 npx tsc --noEmit       # type-check only
 npx eslint src/        # lint
 ```
+
+## Be kind
+
+Be respectful. Bad-faith behavior gets you blocked. Flag conduct problems
+by opening a GitHub issue prefixed `[conduct]`. A formal Code of Conduct
+may be added once contributor traffic warrants one.
+
+## Privacy
+
+Session logs (`~/.inspectrum/sessions/<timestamp>__<id>/`) contain user
+plans and full reviewer transcripts. v0.1.0 chmods each session directory
+and the parent `~/.inspectrum/sessions/` to **0700 on POSIX** so only the
+owning user can read them. Existing session dirs created by older
+inspectrum runs are **not** auto-migrated; users can retrofit with
+`chmod -R 700 ~/.inspectrum/sessions/`. Never commit session content to
+this repo, and never paste secrets into a plan when reproducing an issue.
+
+## Release runbook
+
+inspectrum is published to npm as a public unscoped package. The owner
+runs the publish steps; CI and `prepack` are the safety nets.
+
+### Pre-release checks (always run)
+
+```bash
+git diff --check                # clean working tree
+npx tsc --noEmit                # 0 errors
+npx eslint src/                 # 0 errors
+npm run build                   # 0 errors
+npm run test:coverage           # green, ≥ 90/90/90 on the gated scopes
+npm run test:e2e                # green
+npm pack --dry-run --json       # tarball entry list looks right
+npm view inspectrum name version --json    # confirm the name is still available
+```
+
+### Tagging + publishing
+
+```bash
+git checkout main && git pull --ff-only
+git tag -a v0.1.0 -m "v0.1.0 — first public release"
+git push origin main --tags
+npm publish --access public
+```
+
+### Post-publish smoke (60 s)
+
+```bash
+cd $(mktemp -d) && npx -y inspectrum@0.1.0 doctor
+```
+
+Expect 4 sections (Runtime / Config / Sessions / Reviewers) and a non-zero
+exit if no reviewer CLI is installed — that's the correct behavior on a
+clean machine.
+
+### Why `npm publish --dry-run` is not a safety net
+
+npm 11's `--dry-run` prints "would publish" output regardless of whether
+the real call would have succeeded or failed (and it never makes network
+calls). Treat the flag as documentation of what *would* ship, not as a
+gate. The actual safety nets are `prepack`, the `files` allowlist, and
+manual review of `npm pack --dry-run --json` output before tagging.
 
 ## Pre-commit (lefthook)
 
@@ -26,18 +88,53 @@ npx eslint src/        # lint
 2. `npx eslint src/` — lint
 3. `npx vitest run --passWithNoTests --coverage` — tests + coverage gate
 
-If a hook fails, fix the underlying issue and re-commit. Never bypass with
-`--no-verify`.
-
-To run hooks manually:
+Manual rehearsal works even with nothing staged:
 
 ```bash
 npx lefthook run pre-commit
 ```
 
+If a hook fails, fix the underlying issue and re-commit. Never bypass with
+`--no-verify`.
+
+## From-source install (for contributors)
+
+Public users install with `npx inspectrum@latest`. Contributors usually
+clone:
+
+```bash
+git clone https://github.com/yannmenec/inspectrum.git
+cd inspectrum
+npm install
+npm run build
+node dist/cli.js doctor
+```
+
+Then point your MCP host at the local build. For Claude Code, copy
+[`examples/claude-code/mcp.source.jsonc`](examples/claude-code/mcp.source.jsonc)
+to `.mcp.json` and edit the absolute path. Cursor's `.cursor/mcp.json`
+doesn't accept JSONC comments — copy the JSON shape from
+[`examples/cursor/.cursor/mcp.json`](examples/cursor/.cursor/mcp.json) and
+swap `command/args` to `node` + `["<abs path>/dist/server.js"]` by hand.
+
+## Experimental reviewers
+
+Kimi and Qwen wrappers ship in v0.1.0 but are **experimental**:
+
+- The CLI flag shapes (`-m <model> -p <systemPrompt>` over stdin) are
+  *assumed* based on similar gemini-family CLIs.
+- They have not been smoke-tested against real Moonshot or DashScope CLIs.
+- Per [ADR-0001](_decisions/ADR-0001-defer-integration-tests.md), promoting
+  any reviewer backend to "default" requires a real-CLI smoke test in
+  `tests/integration/` (reintroduced post-v0.2).
+
+Don't put `kimi` or `qwen` in `defaults.reviewers` of a config you ship to
+end users. If the assumed flags turn out to be wrong, open an issue and
+patch `src/reviewers/common.ts`.
+
 ## Adding a reviewer backend
 
-Adding a backend (e.g. `kimi`) takes ≤ 4 hours and follows these five steps:
+Adding a backend (e.g. `kimi`) takes ≤ 4 hours and follows these five steps.
 
 ### Step 1 — Implement the `Reviewer` interface
 
@@ -70,51 +167,36 @@ export class KimiReviewer implements Reviewer {
 }
 ```
 
-`runBackendJsonReview` (in `src/reviewers/common.ts`) takes a **single
-options object** — not positional arguments. The required fields are
-`backend`, `reviewerId`, `config`, `systemPrompt`, `userMessage`,
-`timeoutMs`, and `label`. It spawns the CLI via `spawn` (not `execFileSync`),
-collects stdout, and validates the JSON output against `RawReviewSchema`.
-
-> **Note:** `execFileSync` appears **only** in `src/reviewers/health.ts` for
-> lightweight `--version` checks. Reviewer wrappers always use `spawn` via
-> the internal `spawnCollect` helper.
->
-> If your backend uses a fundamentally different I/O (e.g. streaming JSONL
-> like Codex, which writes to a temp file instead of stdout), study
-> `src/reviewers/codex.ts` before calling `runBackendJsonReview`.
+For HTTP backends (e.g. `ollama`, `openrouter`), call
+`runHttpBackendJsonReview` instead of `runBackendJsonReview`.
 
 ### Step 2 — Extend `src/reviewers/common.ts`
 
 This file owns the `ReviewerBackend` union, the `backendFromName` resolver,
-and the `runBackendJsonReview` dispatch. All three must be updated — skipping
-any one will either fail typecheck or silently route your backend through the
-wrong code path.
+the `mergeReviewerArgs` helper's reserved-flag sets, and the
+`runBackendJsonReview` dispatch. All must be updated:
 
 ```typescript
 // 1. Extend the union type:
-export type ReviewerBackend = "claude" | "codex" | "gemini" | "kimi";
+export type ReviewerBackend = "claude" | "codex" | "gemini" | "ollama" | "openrouter" | "kimi" | "qwen";
 
 // 2. Register the binary name in backendFromName():
-function backendFromName(name: string): ReviewerBackend | undefined {
-  if (name === "claude" || name === "codex" || name === "gemini" || name === "kimi") return name;
-  return undefined;
-}
+const known = ["claude", "codex", "gemini", "kimi", "qwen"] as const;
 
 // 3. Update the error message in resolveReviewerBackend():
 throw new ReviewerOperationalError(
-  `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi.`
+  `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, ollama (http), openrouter (http).`
 );
 
 // 4. Add a dispatch branch in runBackendJsonReview():
-if (opts.backend === "kimi") {
-  return runKimiJsonReview(opts);   // implement analogously to runGeminiJsonReview
-}
+if (opts.backend === "kimi") return runKimiJsonReview(opts);
 ```
 
 If your backend uses a non-standard I/O format (e.g. temp-file output like
-Codex), implement a dedicated private `runKimiJsonReview` function in
-`common.ts` rather than reusing `runGeminiJsonReview`.
+Codex), implement a dedicated private `runKimiJsonReview` function rather
+than reusing `runGeminiJsonReview`. Always pass `opts.config.args` through
+`mergeReviewerArgs(opts.config.args, RESERVED)` so user-provided args land
+in the spawn argv without duplicating reserved canonical flags.
 
 ### Step 3 — Register in the factory and schema
 
@@ -122,54 +204,35 @@ In `src/reviewers/index.ts`, add your backend to `createReviewer`:
 
 ```typescript
 import { KimiReviewer } from "./kimi.js";
-
 // inside createReviewer():
-if (backend === "kimi") {
-  return new KimiReviewer(id, config);
-}
+if (backend === "kimi") return new KimiReviewer(id, config);
 ```
 
-Also add `"kimi"` to the `backend` enum in `src/schemas.ts`:
-
-```typescript
-backend: z.enum(["claude", "codex", "gemini", "kimi"]).optional(),
-```
+Also add your backend to the `backend` enum in
+[src/schemas.ts](src/schemas.ts) `ReviewerConfigSchema`. Both `cli` and
+`http` backends share the enum.
 
 ### Step 4 — Add a fix hint in health.ts
 
 In `src/reviewers/health.ts`, extend `installFix`:
 
 ```typescript
-kimi: "Install Kimi CLI: npm install -g @moonshotai/kimi-cli",
+kimi: "Install Kimi CLI: uv tool install --python 3.13 kimi-cli",
 ```
 
 This appears in `inspectrum doctor` output when the binary is missing.
 
 ### Step 5 — Write unit tests
 
-Create `tests/unit/reviewers/kimi.test.ts` following the same pattern as
-`claude.test.ts` or `codex.test.ts`:
+Create `tests/unit/reviewers/kimi.test.ts` following the pattern in
+`gemini.test.ts` or `claude.test.ts`. All subprocess calls must be mocked
+— no real LLM in unit tests:
 
-```typescript
-vi.mock("node:child_process");
-
-import * as childProcess from "node:child_process";
-import { KimiReviewer } from "../../../src/reviewers/kimi.js";
-
-// Reviewer wrappers call spawn (not execFileSync — that's only for health checks)
-const mockSpawn = vi.mocked(childProcess.spawn);
-
-describe("KimiReviewer", () => {
-  it("parses a valid JSON review", () => { ... });
-  it("throws ReviewerOperationalError on timeout", () => { ... });
-  it("throws ReviewerOperationalError on non-zero exit code", () => { ... });
-});
-```
-
-All subprocess calls must be mocked — no real LLM in unit tests. Note the
-mock target:
-- **`spawn`** → mock this for reviewer wrappers (`KimiReviewer`, `ClaudeReviewer`, etc.)
-- **`execFileSync`** → mock this for health checks (`checkReviewer` in `health.ts`) only
+- **`spawn`** → mock for reviewer wrappers (any CLI backend).
+- **`execFileSync`** → mock for health checks only (`checkReviewer` in
+  `health.ts`).
+- **`fetch`** → mock via `vi.stubGlobal("fetch", ...)` for HTTP backends
+  (ollama, openrouter).
 
 ### Step 6 — Add a fixture + snapshot
 
@@ -189,6 +252,7 @@ Canonical plans live in `tests/fixtures/plans/`. Each file has a
 corresponding `expected-verdict.json` and optionally a `report.md.snap`.
 
 Rules:
+
 - Never commit a snapshot update without reading the diff.
 - If the judge prompt changes, regenerate all snapshots with
   `vitest --update-snapshots` and review each one.
@@ -197,15 +261,16 @@ Rules:
 
 ## Coverage gate
 
-`vitest.config.ts` enforces on the critical paths
-(`src/tool/**`, `src/reviewers/**`, `src/judge/**`, `src/config.ts`,
-`src/doctor.ts`):
+`vitest.config.ts` enforces ≥ 90 % statements / functions / lines / branches
+across the aggregate of:
 
-| Metric | Threshold |
-|---|---|
-| Lines | ≥ 90% |
-| Functions | ≥ 90% |
-| Branches | ≥ 90% |
+- `src/tool/**`
+- `src/reviewers/**`
+- `src/judge/**`
+- `src/config.ts`
+- `src/doctor.ts`
+- `src/server/**`
+- `src/session/**`
 
 Do not lower these thresholds without explicit discussion. If a new module
 brings coverage below the gate, write additional tests before merging.
@@ -225,4 +290,5 @@ The most critical ones for contributors:
   prompt `.md` files at runtime.
 - Session writes are atomic (write to tmp, then rename). Use `writeSession`
   and `readSessionFile` from `src/session/store.ts` — never write to session
-  paths directly.
+  paths directly. Per-session directories chmod to 0700 on POSIX via
+  `ensurePrivateDir`.
