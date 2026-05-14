@@ -7,7 +7,15 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "**/.claude/worktrees/**"],
     coverage: {
       provider: "v8",
-      include: ["src/tool/**", "src/reviewers/**", "src/judge/**", "src/config.ts", "src/doctor.ts"],
+      include: [
+        "src/tool/**",
+        "src/reviewers/**",
+        "src/judge/**",
+        "src/config.ts",
+        "src/doctor.ts",
+        "src/server/**",
+        "src/session/**",
+      ],
       thresholds: {
         lines: 90,
         functions: 90,

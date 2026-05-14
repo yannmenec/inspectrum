@@ -1,8 +1,11 @@
 pre-commit:
   commands:
     typecheck:
+      glob: "*"
       run: npx tsc --noEmit
     lint:
+      glob: "*"
       run: npx eslint src/
     test:
+      glob: "*"
       run: npx vitest run --passWithNoTests --coverage
