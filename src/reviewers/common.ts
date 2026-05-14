@@ -12,35 +12,49 @@ const PLAN_MAX_CHARS = 16000;
 export const TRUNCATION_MARKER = "\n\n[...truncated]";
 
 /**
- * Filters user-provided CLI args (from ~/.inspectrum/config.toml) against a set of
- * reserved flag names owned by the canonical reviewer invocation. Reserved flags
- * (and their values, when in paired form "--flag value") are dropped so the
- * canonical invocation stays authoritative. Inline form ("--flag=value") is also
- * filtered. Non-reserved args are preserved in original order.
- *
- * Heuristic for value consumption: if the next argument exists and does not start
- * with "-", treat it as the value of the reserved flag and drop it too. This
- * handles both paired flags ("-m gpt-5") and bool flags ("-p") without requiring
- * per-flag arity declarations.
+ * Per-flag arity declaration for reserved flags owned by the canonical reviewer
+ * invocation. `bool` flags consume no value (e.g. `-p`, `--ephemeral`). `paired`
+ * flags consume the next argv token as their value (e.g. `-m gpt-5`), regardless
+ * of whether that token starts with `-` (model names that begin with `-` are
+ * unusual but legal and must not leak through).
+ */
+export interface ReservedFlags {
+  readonly bool: readonly string[];
+  readonly paired: readonly string[];
+}
+
+/**
+ * Filters user-provided CLI args (from ~/.inspectrum/config.toml) against the
+ * reserved flag set owned by the canonical reviewer invocation. Reserved flags
+ * are dropped so the canonical invocation stays authoritative:
+ *   - `bool` reserved → drop just the flag token.
+ *   - `paired` reserved → drop the flag token AND the next token (its value),
+ *     including values that start with `-`.
+ *   - inline form (`--flag=value`) → drop the single token if `--flag` appears
+ *     in either set.
+ * Non-reserved args are preserved in original order.
  */
 export function mergeReviewerArgs(
   configArgs: string[] | undefined,
-  reserved: readonly string[],
+  reserved: ReservedFlags,
 ): string[] {
   if (!configArgs || configArgs.length === 0) return [];
-  const reservedSet = new Set(reserved);
+  const boolSet = new Set(reserved.bool);
+  const pairedSet = new Set(reserved.paired);
   const out: string[] = [];
   for (let i = 0; i < configArgs.length; i++) {
     const arg = configArgs[i]!;
     const eqIdx = arg.indexOf("=");
-    if (eqIdx > 0 && arg.startsWith("-") && reservedSet.has(arg.slice(0, eqIdx))) {
+    if (eqIdx > 0 && arg.startsWith("-")) {
+      const flagName = arg.slice(0, eqIdx);
+      if (boolSet.has(flagName) || pairedSet.has(flagName)) continue;
+    }
+    if (pairedSet.has(arg)) {
+      // Always consume the next token as the value, even if it starts with "-".
+      if (i + 1 < configArgs.length) i += 1;
       continue;
     }
-    if (reservedSet.has(arg)) {
-      const next = configArgs[i + 1];
-      if (next !== undefined && !next.startsWith("-")) i += 1;
-      continue;
-    }
+    if (boolSet.has(arg)) continue;
     out.push(arg);
   }
   return out;
@@ -272,7 +286,10 @@ export async function runHttpBackendJsonReview(opts: {
   });
 }
 
-const CLAUDE_RESERVED = ["-p", "--print", "--append-system-prompt", "--json-schema", "--output-format"];
+const CLAUDE_RESERVED: ReservedFlags = {
+  bool: ["-p", "--print"],
+  paired: ["--append-system-prompt", "--json-schema", "--output-format"],
+};
 
 async function runClaudeJsonReview(opts: {
   reviewerId: string;
@@ -298,7 +315,12 @@ async function runClaudeJsonReview(opts: {
   return parseClaudeOutput(stdout, opts.reviewerId, opts.label);
 }
 
-const CODEX_RESERVED = ["exec", "--ephemeral", "-m", "--model", "--output-schema", "--output-last-message"];
+const CODEX_RESERVED: ReservedFlags = {
+  // `exec` is the codex subcommand we always inject; if a user re-passes it,
+  // drop the duplicate. `--ephemeral` is a bool flag.
+  bool: ["exec", "--ephemeral"],
+  paired: ["-m", "--model", "--output-schema", "--output-last-message"],
+};
 
 async function runCodexJsonReview(opts: {
   reviewerId: string;
@@ -336,7 +358,10 @@ async function runCodexJsonReview(opts: {
   }
 }
 
-const GEMINI_FAMILY_RESERVED = ["-m", "--model", "-p", "--prompt"];
+const GEMINI_FAMILY_RESERVED: ReservedFlags = {
+  bool: [],
+  paired: ["-m", "--model", "-p", "--prompt"],
+};
 
 async function runGeminiJsonReview(opts: {
   reviewerId: string;

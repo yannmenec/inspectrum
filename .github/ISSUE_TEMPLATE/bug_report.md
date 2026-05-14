@@ -12,7 +12,7 @@ What happened, what you expected.
 
 - OS:
 - Node version (`node --version`):
-- inspectrum version (`npx inspectrum@latest --version` or commit hash if from source):
+- inspectrum version (`inspectrum --version` if installed, or commit hash if from source):
 - Reviewer CLIs you have installed (output of `inspectrum doctor`):
 - MCP host (Claude Code / Codex Desktop / Cursor / other) + version:
 

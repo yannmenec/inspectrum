@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -13,15 +14,18 @@ const HAS_DIST = existsSync(DIST_SERVER);
 describe.skipIf(!HAS_DIST)("MCP server — stdio e2e smoke", () => {
   let client: Client;
   let transport: StdioClientTransport;
+  let isolatedHome: string;
 
   beforeAll(async () => {
+    // Isolate the spawned server from the host filesystem: redirect HOME to a
+    // per-test tmpdir so it cannot read/write the developer's real
+    // ~/.inspectrum/ during the test. mkdtemp (not a hardcoded path) so
+    // concurrent local + CI runs don't collide.
+    isolatedHome = mkdtempSync(join(tmpdir(), "inspectrum-e2e-"));
     transport = new StdioClientTransport({
       command: process.execPath,
       args: [DIST_SERVER],
-      // Isolate the spawned server from the host filesystem: redirect HOME to a
-      // throw-away dir so it cannot read/write the developer's real
-      // ~/.inspectrum/ during the test.
-      env: { ...process.env, HOME: "/tmp/inspectrum-e2e-home", NO_COLOR: "1" },
+      env: { ...process.env, HOME: isolatedHome, NO_COLOR: "1" },
     });
     client = new Client({ name: "inspectrum-e2e", version: "1.0.0" });
     await client.connect(transport);
@@ -29,6 +33,9 @@ describe.skipIf(!HAS_DIST)("MCP server — stdio e2e smoke", () => {
 
   afterAll(async () => {
     await client?.close();
+    if (isolatedHome) {
+      rmSync(isolatedHome, { recursive: true, force: true });
+    }
   });
 
   it("exposes exactly one tool named review_plan with input + output schemas", async () => {

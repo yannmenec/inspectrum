@@ -81,6 +81,33 @@ export const ReviewerConfigSchema = z.object({
   model: z.string().optional(),
 });
 
+export const ConfigSchema = z.object({
+  version: z.number().int().default(1),
+  defaults: z
+    .object({
+      reviewers: z.array(z.string()).default(["claude"]),
+      judge: z.string().default("claude"),
+      focus: z.enum(["correctness", "completeness", "risk", "clarity", "all"]).default("all"),
+    })
+    .default({ reviewers: ["claude"], judge: "claude", focus: "all" }),
+  reviewers: z
+    .record(z.string(), ReviewerConfigSchema)
+    .default({
+      claude: { type: "cli", binary: "claude", args: ["-p", "--output-format", "json", "--no-session-persistence"] },
+      codex: { type: "cli", binary: "codex", args: ["exec", "--ephemeral", "--json"] },
+      gemini: { type: "cli", binary: "gemini", args: ["--prompt", "-"] },
+    }),
+  limits: z
+    .object({
+      plan_max_chars: z.number().int().default(16000),
+      report_max_chars: z.number().int().default(8000),
+      timeout_seconds: z.number().int().default(60),
+    })
+    .default({ plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 60 }),
+});
+
+export type Config = z.infer<typeof ConfigSchema>;
+
 export const OllamaResponseSchema = z.object({
   message: z.object({ content: z.string() }),
 });

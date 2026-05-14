@@ -9,19 +9,12 @@
 
 ## Why
 
-Plan Mode (Shift+Tab in Claude Code, `/plan` in Codex, similar in Cursor) is
-where the agent decides *what to build* before it writes a single line. A bad
-plan equals wasted tokens, a thrown-out PR, and worse code. Asking one LLM
-to proofread its own plan is like asking a writer to spot their own typos —
-the same model is blind to the same things.
-
-inspectrum sends your plan to other LLMs (Claude, Codex, Gemini, Kimi, Qwen,
-Ollama, OpenRouter) in parallel, a judge LLM consolidates the findings, and
-you get one verdict: **approve / revise / reject** — with blockers, majors,
-and minors called out. It works with as few as 1 LLM (no judge); 2 or more
-unlocks the judge.
-
-Better plan, better code, fewer wasted tokens.
+Plan Mode is where the agent decides what to build before it writes a line of
+code. A bad plan wastes tokens, produces thrown-out PRs, and lowers code
+quality. One LLM reviewing its own plan misses the same blind spots.
+inspectrum sends the plan to other LLMs in parallel, a judge LLM consolidates
+the findings, and you get one verdict: **approve / revise / reject**. It works
+with 1 LLM (no judge); 2 or more unlocks the judge.
 
 ## Get started
 
