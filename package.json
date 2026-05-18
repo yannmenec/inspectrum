@@ -1,10 +1,10 @@
 {
   "name": "inspectrum",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Universal MCP server for multi-LLM plan review",
   "type": "module",
   "bin": {
-    "inspectrum": "./dist/cli.js"
+    "inspectrum": "dist/cli.js"
   },
   "main": "./dist/cli.js",
   "files": [
