@@ -47,15 +47,20 @@ Steps:
 
 4. Run `claude mcp add --transport stdio --scope user inspectrum -- npx -y inspectrum@latest`
 5. Run `npx -y inspectrum@latest doctor` and show me the output.
-6. If doctor shows `⚠ codex` (auth env not set), tell me to open a
-   fresh terminal and run `codex` once, signing in with my ChatGPT
-   account. The ⚠ stays after login — OAuth tokens don't set env
-   vars — so it's only a hard problem if I haven't logged in yet.
+6. Run `codex login status`.
+   - If it prints "Logged in", tell me: "✅ Setup complete. Just ask
+     me to 'Review this plan with inspectrum' on any plan." Done.
+   - Otherwise (not logged in), pop open a Terminal window with codex
+     already running by executing:
+       `osascript -e 'tell application "Terminal" to do script "codex"'`
+     Then tell me: "A Terminal window opened with codex running.
+     Inside that window, click 'Sign in with ChatGPT', complete the
+     login in my browser, then close the Terminal window. inspectrum
+     is then ready."
 
 Do NOT use sudo, edit shell profiles, push git changes, read .env or
 credentials, or publish packages. Report back: Node version, codex
-install status, doctor verdict, and whether I still need to finish a
-login.
+install status, doctor verdict, and whether login was needed.
 ````
 
 ### If you use Codex Desktop
@@ -78,15 +83,21 @@ Steps:
 
 4. Run `codex mcp add inspectrum -- npx -y inspectrum@latest`
 5. Run `npx -y inspectrum@latest doctor` and show me the output.
-6. If doctor shows `⚠ claude` (auth env not set), tell me to open a
-   fresh terminal, run `claude`, and complete `/login` with my Claude
-   account. The ⚠ stays after login — OAuth tokens don't set env vars
-   — so it's only a hard problem if I haven't logged in yet.
+6. Pop open a Terminal window with claude already running so I can
+   confirm or complete login, by executing:
+     `osascript -e 'tell application "Terminal" to do script "claude"'`
+   Then tell me:
+   - "If claude shows its chat prompt, you're already logged in —
+     close the Terminal window. inspectrum is ready."
+   - "If claude shows /login or opens a browser, complete the sign-in
+     with your Claude account, then close the Terminal window.
+     inspectrum is then ready."
+   (The ⚠ claude line in the doctor stays even after login because
+   claude doesn't expose a status command we can detect — harmless.)
 
 Do NOT use sudo, edit shell profiles, push git changes, read .env or
 credentials, or publish packages. Report back: Node version, claude
-install status, doctor verdict, and whether I still need to finish a
-login.
+install status, doctor verdict, and whether login was needed.
 ````
 
 After the one-time login (if needed), you're set.
