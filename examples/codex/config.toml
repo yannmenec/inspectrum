@@ -12,3 +12,9 @@ args    = ["/absolute/path/to/inspectrum/dist/server.js"]
 # Once published on npm, replace the two lines above with:
 # command = "npx"
 # args    = ["-y", "inspectrum@latest"]
+
+# For cross-LLM reviews (Codex user reviewing with claude + gemini),
+# uncomment and supply peer-LLM keys. See README.md → "Cross-LLM setup".
+# [mcp_servers.inspectrum.env]
+# ANTHROPIC_API_KEY = "<your Anthropic key>"
+# GEMINI_API_KEY    = "<your Gemini key>"

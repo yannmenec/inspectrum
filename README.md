@@ -96,6 +96,57 @@ codex mcp add inspectrum -- npx -y inspectrum@latest
 
 Manual JSON/TOML examples live under [`examples/`](examples/). See the [Claude Code MCP docs](https://code.claude.com/docs/en/mcp), [Codex MCP docs](https://developers.openai.com/codex/mcp), [Codex CLI](https://developers.openai.com/codex/cli), and [Cursor install links](https://cursor.com/docs/mcp/install-links) for host docs.
 
+## Cross-LLM setup
+
+inspectrum is designed for **cross-LLM** review: a Claude Code user reviews with `codex` + `gemini`, a Codex user reviews with `claude` + `gemini`, and so on. Same-vendor review shares the same blind spots, *and* Desktop MCP hosts don't forward their OAuth/API keys into the inspectrum subprocess - reviewing with your host's own vendor will fail authentication regardless.
+
+| Your host | Recommended reviewers | Keys to forward |
+|-----------|----------------------|------------------|
+| Claude Desktop / Claude Code | `codex`, `gemini` | `OPENAI_API_KEY`, `GEMINI_API_KEY` |
+| Codex app | `claude`, `gemini` | `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` |
+| Gemini CLI | `claude`, `codex` | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` |
+
+Pass peer API keys through your host's MCP `env` block:
+
+```jsonc
+// .mcp.json (Claude Code, Cursor)
+{
+  "mcpServers": {
+    "inspectrum": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "inspectrum@latest"],
+      "env": {
+        "OPENAI_API_KEY": "<your OpenAI key>",
+        "GEMINI_API_KEY": "<your Gemini key>"
+      }
+    }
+  }
+}
+```
+
+```toml
+# ~/.codex/config.toml (Codex app)
+[mcp_servers.inspectrum]
+command = "npx"
+args    = ["-y", "inspectrum@latest"]
+
+[mcp_servers.inspectrum.env]
+ANTHROPIC_API_KEY = "<your Anthropic key>"
+GEMINI_API_KEY    = "<your Gemini key>"
+```
+
+Then pin the reviewers in `~/.inspectrum/config.toml`:
+
+```toml
+[defaults]
+reviewers = ["codex", "gemini"]   # for a Claude Code user
+```
+
+Without this file, inspectrum defaults to `reviewers = ["claude"]` - wrong from a Claude-based host.
+
+**Heads up.** Don't commit `.mcp.json` with real keys (the repo's `.gitignore` excludes `/.mcp.json`). If `inspectrum doctor` shows ✅ but `review_plan` still fails, your host isn't forwarding the keys - `inspectrum doctor` only sees the inspectrum subprocess env, which is what the doctor's `⚠` warnings flag.
+
 ## Use
 
 Before approving a plan, ask:

@@ -117,6 +117,12 @@ doesn't accept JSONC comments — copy the JSON shape from
 [`examples/cursor/.cursor/mcp.json`](examples/cursor/.cursor/mcp.json) and
 swap `command/args` to `node` + `["<abs path>/dist/server.js"]` by hand.
 
+If you're reviewing plans from a Desktop host (Claude Code, Codex app,
+Cursor), see the [Cross-LLM setup](README.md#cross-llm-setup) section in
+README for how to pass peer-LLM API keys through the host's MCP `env` block.
+Without that, `review_plan` will fail with auth errors even though
+`inspectrum doctor` reports ✅ for binary presence.
+
 ## Experimental reviewers
 
 Kimi and Qwen wrappers ship in v0.1.0 but are **experimental**:

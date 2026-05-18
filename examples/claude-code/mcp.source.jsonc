@@ -6,11 +6,19 @@
 //
 // Claude Code accepts JSONC (JSON with comments) for .mcp.json; Cursor
 // does NOT — for Cursor, use the prose instructions in CONTRIBUTING.md.
+//
+// For cross-LLM reviews (e.g. Claude Code reviewing with codex + gemini),
+// uncomment the "env" block below and supply peer-LLM keys. See
+// README.md → "Cross-LLM setup" for the host → reviewers table.
 {
   "mcpServers": {
     "inspectrum": {
       "type": "stdio",
       "command": "node",
+      // "env": {
+      //   "OPENAI_API_KEY": "<your OpenAI key>",
+      //   "GEMINI_API_KEY": "<your Gemini key>"
+      // },
       "args": ["/absolute/path/to/inspectrum/dist/server.js"]
     }
   }

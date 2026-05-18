@@ -3,6 +3,7 @@ dist/
 dist-mcpb/
 *.js.map
 .env
+/.mcp.json
 coverage/
 .DS_Store
 *.tsbuildinfo
