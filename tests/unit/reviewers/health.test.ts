@@ -8,12 +8,38 @@ import type { ReviewerConfig } from "../../../src/schemas.js";
 
 const mockExecFileSync = vi.mocked(childProcess.execFileSync);
 
+// Env vars checked by health.ts for CLI auth detection. Cleared in beforeEach
+// so tests are deterministic regardless of the developer's local environment.
+const REVIEWER_ENV_KEYS = [
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "GOOGLE_GENAI_USE_VERTEXAI",
+] as const;
+
 describe("checkReviewer — CLI", () => {
-  beforeEach(() => vi.resetAllMocks());
+  const prevEnv: Partial<Record<(typeof REVIEWER_ENV_KEYS)[number], string | undefined>> = {};
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    for (const k of REVIEWER_ENV_KEYS) {
+      prevEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+
+  afterEach(() => {
+    for (const k of REVIEWER_ENV_KEYS) {
+      if (prevEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = prevEnv[k];
+    }
+  });
 
   it("returns ok=true when binary responds to --version", () => {
     mockExecFileSync.mockReturnValue("claude 2.1.0");
-    return expect(checkReviewer("claude", { type: "cli", binary: "claude" })).resolves.toMatchObject({ ok: true });
+    process.env["ANTHROPIC_API_KEY"] = "sk-test";
+    return expect(checkReviewer("claude", { type: "cli", binary: "claude" })).resolves.toEqual({ ok: true });
   });
 
   it("returns ok=false with fix hint when binary not found (ENOENT)", () => {
@@ -27,7 +53,8 @@ describe("checkReviewer — CLI", () => {
 
   it("returns ok=true (optimistic) for other errors (auth, permissions)", () => {
     mockExecFileSync.mockImplementation(() => { throw new Error("exit code 1"); });
-    return expect(checkReviewer("claude", { type: "cli", binary: "claude" })).resolves.toMatchObject({ ok: true });
+    process.env["ANTHROPIC_API_KEY"] = "sk-test";
+    return expect(checkReviewer("claude", { type: "cli", binary: "claude" })).resolves.toEqual({ ok: true });
   });
 
   it("uses binary field from config", () => {
@@ -48,6 +75,59 @@ describe("checkReviewer — CLI", () => {
     return expect(checkReviewer("unknown-llm", { type: "cli", binary: "unknown-llm" })).resolves.toMatchObject({
       ok: false,
       fix: expect.stringContaining("unknown-llm"),
+    });
+  });
+
+  describe("auth env-var detection", () => {
+    it("warns when claude binary found but ANTHROPIC_API_KEY unset", async () => {
+      mockExecFileSync.mockReturnValue("claude 2.1.0");
+      const result = await checkReviewer("claude", { type: "cli", binary: "claude" });
+      expect(result.ok).toBe(true);
+      expect(result.warning).toMatch(/ANTHROPIC_API_KEY/);
+    });
+
+    it("warns when claude binary found but ANTHROPIC_API_KEY is empty string", async () => {
+      mockExecFileSync.mockReturnValue("claude 2.1.0");
+      process.env["ANTHROPIC_API_KEY"] = "";
+      const result = await checkReviewer("claude", { type: "cli", binary: "claude" });
+      expect(result.ok).toBe(true);
+      expect(result.warning).toMatch(/ANTHROPIC_API_KEY/);
+    });
+
+    it("does not warn when claude binary found and ANTHROPIC_API_KEY is set", async () => {
+      mockExecFileSync.mockReturnValue("claude 2.1.0");
+      process.env["ANTHROPIC_API_KEY"] = "sk-real-key";
+      const result = await checkReviewer("claude", { type: "cli", binary: "claude" });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it("warns when codex binary found but OPENAI_API_KEY unset", async () => {
+      mockExecFileSync.mockReturnValue("codex 1.0");
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result.ok).toBe(true);
+      expect(result.warning).toMatch(/OPENAI_API_KEY/);
+    });
+
+    it("warns when gemini binary found and none of GEMINI_API_KEY/GOOGLE_API_KEY/GOOGLE_GENAI_USE_VERTEXAI is set", async () => {
+      mockExecFileSync.mockReturnValue("gemini 1.0");
+      const result = await checkReviewer("gemini", { type: "cli", binary: "gemini" });
+      expect(result.ok).toBe(true);
+      expect(result.warning).toMatch(/GEMINI_API_KEY/);
+      expect(result.warning).toMatch(/GOOGLE_API_KEY/);
+      expect(result.warning).toMatch(/GOOGLE_GENAI_USE_VERTEXAI/);
+    });
+
+    it("does not warn for gemini when GOOGLE_GENAI_USE_VERTEXAI is set (alternative auth)", async () => {
+      mockExecFileSync.mockReturnValue("gemini 1.0");
+      process.env["GOOGLE_GENAI_USE_VERTEXAI"] = "1";
+      const result = await checkReviewer("gemini", { type: "cli", binary: "gemini" });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it("does not warn for backends not in the CLI_REVIEWER_ENV map (e.g. kimi)", async () => {
+      mockExecFileSync.mockReturnValue("kimi 1.0");
+      const result = await checkReviewer("kimi", { type: "cli", binary: "kimi" });
+      expect(result).toEqual({ ok: true });
     });
   });
 });

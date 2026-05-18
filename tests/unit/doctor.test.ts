@@ -296,6 +296,42 @@ describe("runDoctor", () => {
     expect(output).toContain("bare string error");
   });
 
+  it("renders warning (⚠) for active reviewer but does NOT toggle allOk", async () => {
+    mockLoadConfig.mockReturnValue(HEALTHY_CONFIG);
+    mockCheckReviewer.mockResolvedValue({
+      ok: true,
+      warning: "binary found but ANTHROPIC_API_KEY not set — reviews will fail unless claude has an OAuth login",
+    });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(true);
+    expect(output).toContain("⚠");
+    expect(output).toContain("ANTHROPIC_API_KEY");
+  });
+
+  it("renders warning (⚠) for optional reviewer without toggling allOk", async () => {
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      defaults: { reviewers: ["claude"], judge: "claude", focus: "all" as const },
+      reviewers: {
+        claude: { type: "cli" as const, binary: "claude" },
+        codex: { type: "cli" as const, binary: "codex" },
+      },
+    });
+    mockCheckReviewer.mockImplementation(async (id: string) => {
+      if (id === "claude") return { ok: true };
+      return { ok: true, warning: "binary found but OPENAI_API_KEY not set — reviews will fail unless codex has an OAuth login" };
+    });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(true);
+    expect(output).toContain("Optional reviewers");
+    expect(output).toContain("⚠");
+    expect(output).toContain("OPENAI_API_KEY");
+  });
+
   it("produces colored output when isTTY is true and NO_COLOR is unset", async () => {
     const prevIsTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
     const prevNoColor = process.env["NO_COLOR"];

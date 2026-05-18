@@ -5,7 +5,18 @@ export interface HealthResult {
   ok: boolean;
   reason?: string;
   fix?: string;
+  /** Non-fatal advisory (e.g. peer-LLM auth env var missing). Does NOT toggle allOk. */
+  warning?: string;
 }
+
+// Env vars each CLI backend will look for when actually invoked. Entries are
+// alternatives — if any one is set to a truthy value, auth is presumed present.
+// Backends not in this map (e.g. ollama, local CLIs) are not checked.
+const CLI_REVIEWER_ENV: Record<string, readonly string[]> = {
+  claude: ["ANTHROPIC_API_KEY"],
+  codex: ["OPENAI_API_KEY"],
+  gemini: ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_USE_VERTEXAI"],
+};
 
 export async function checkReviewer(id: string, config: ReviewerConfig): Promise<HealthResult> {
   if (config.type === "http") {
@@ -40,7 +51,6 @@ function checkCli(id: string, binary: string): HealthResult {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    return { ok: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("ENOENT") || msg.includes("not found")) {
@@ -50,9 +60,19 @@ function checkCli(id: string, binary: string): HealthResult {
         fix: installFix(id),
       };
     }
-    // Binary present but version check failed (auth, permissions, etc.) — optimistic
-    return { ok: true };
+    // Binary present but version check failed (auth, permissions, etc.) — optimistic, fall through.
   }
+  // Binary appears to exist. Warn if the peer-LLM auth env var is missing — Desktop MCP hosts
+  // often don't propagate API keys, so a green ✅ here without an env check is a false positive.
+  const envs = CLI_REVIEWER_ENV[id];
+  if (envs && !envs.some((k) => !!process.env[k])) {
+    const envList = envs.length === 1 ? envs[0] : envs.join(" or ");
+    return {
+      ok: true,
+      warning: `binary found but ${envList} not set — reviews will fail unless ${binary} has an OAuth login`,
+    };
+  }
+  return { ok: true };
 }
 
 async function checkHttp(endpoint: string): Promise<HealthResult> {

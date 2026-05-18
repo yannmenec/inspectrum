@@ -9,10 +9,12 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
   const useColor = process.stdout.isTTY === true && !process.env["NO_COLOR"];
   const G = useColor ? "\x1b[32m" : "";
   const R = useColor ? "\x1b[31m" : "";
+  const Y = useColor ? "\x1b[33m" : "";
   const B = useColor ? "\x1b[1m"  : "";
   const Z = useColor ? "\x1b[0m"  : "";
 
   const pass    = (label: string) => process.stdout.write(`  ${G}✅${Z} ${label}\n`);
+  const warn    = (label: string) => process.stdout.write(`  ${Y}⚠${Z}  ${label}\n`);
   const failMsg = (label: string) => process.stdout.write(`  ${R}❌${Z} ${label}\n`);
   const hint    = (text: string)  => process.stdout.write(`     ${text}\n`);
   const section = (title: string) => process.stdout.write(`\n${B}${title}${Z}\n`);
@@ -84,7 +86,8 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
     for (const [id, reviewerConfig] of activeEntries) {
       const result = await checkReviewer(id, reviewerConfig);
       if (result.ok) {
-        pass(id);
+        if (result.warning) warn(`${id} — ${result.warning}`);
+        else pass(id);
       } else {
         failMsg(`${id}${result.reason ? ` — ${result.reason}` : ""}`);
         if (result.fix) hint(`Fix: ${result.fix}`);
@@ -97,7 +100,8 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
       for (const [id, reviewerConfig] of optionalEntries) {
         const result = await checkReviewer(id, reviewerConfig);
         if (result.ok) {
-          pass(id);
+          if (result.warning) warn(`${id} — ${result.warning}`);
+          else pass(id);
         } else {
           // Optional: print status but do NOT toggle allOk.
           process.stdout.write(`  ${R}○${Z} ${id}${result.reason ? ` — ${result.reason}` : ""}\n`);
