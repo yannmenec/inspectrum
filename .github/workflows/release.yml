@@ -9,6 +9,8 @@ jobs:
   pack:
     name: Pack and upload tarball
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +41,21 @@ jobs:
           name: ${{ steps.pack.outputs.tarball }}
           path: ${{ steps.pack.outputs.tarball }}
           if-no-files-found: error
+
+      - name: Build MCPB bundle
+        run: npm run build:mcpb
+
+      - name: Create stable alias asset (inspectrum.mcpb)
+        run: cp dist-mcpb/inspectrum-0.1.1.mcpb dist-mcpb/inspectrum.mcpb
+
+      - name: Upload .mcpb to Release (draft)
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
+        with:
+          files: |
+            dist-mcpb/inspectrum-0.1.1.mcpb
+            dist-mcpb/inspectrum.mcpb
+          fail_on_unmatched_files: true
+          draft: true
 
       # Intentional: this workflow does NOT run `npm publish`. The owner runs
       # `npm publish --access public` manually after reviewing the tarball.
