@@ -1,6 +1,6 @@
 {
   "name": "inspectrum",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Universal MCP server for multi-LLM plan review",
   "type": "module",
   "bin": {
@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build:mcpb": "mcpb pack mcpb dist-mcpb/inspectrum-0.1.1.mcpb",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build && vitest run tests/e2e",
@@ -46,6 +47,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
     "@types/node": "^25.6.0",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
