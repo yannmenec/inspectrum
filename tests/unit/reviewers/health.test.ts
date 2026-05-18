@@ -101,11 +101,25 @@ describe("checkReviewer — CLI", () => {
       expect(result).toEqual({ ok: true });
     });
 
-    it("warns when codex binary found but OPENAI_API_KEY unset", async () => {
-      mockExecFileSync.mockReturnValue("codex 1.0");
+    it("warns when codex binary found but OPENAI_API_KEY unset and `codex login status` fails", async () => {
+      mockExecFileSync.mockImplementation((_bin: string, args: readonly string[]) => {
+        if (args[0] === "--version") return "codex 1.0" as unknown as Buffer;
+        // login status fails → not logged in
+        throw new Error("login status: not authenticated");
+      });
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
       expect(result.ok).toBe(true);
       expect(result.warning).toMatch(/OPENAI_API_KEY/);
+    });
+
+    it("does NOT warn when codex `login status` reports Logged in (OAuth via ChatGPT)", async () => {
+      mockExecFileSync.mockImplementation((_bin: string, args: readonly string[]) => {
+        if (args[0] === "--version") return "codex 1.0" as unknown as Buffer;
+        if (args[0] === "login" && args[1] === "status") return "Logged in using ChatGPT" as unknown as Buffer;
+        throw new Error("unexpected call");
+      });
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result).toEqual({ ok: true });
     });
 
     it("warns when gemini binary found and none of GEMINI_API_KEY/GOOGLE_API_KEY/GOOGLE_GENAI_USE_VERTEXAI is set", async () => {

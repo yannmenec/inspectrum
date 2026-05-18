@@ -62,10 +62,11 @@ function checkCli(id: string, binary: string): HealthResult {
     }
     // Binary present but version check failed (auth, permissions, etc.) — optimistic, fall through.
   }
-  // Binary appears to exist. Warn if the peer-LLM auth env var is missing — Desktop MCP hosts
-  // often don't propagate API keys, so a green ✅ here without an env check is a false positive.
+  // Binary appears to exist. Warn if the peer-LLM auth env var is missing AND we can't detect
+  // an interactive OAuth login — Desktop MCP hosts often don't propagate API keys.
   const envs = CLI_REVIEWER_ENV[id];
   if (envs && !envs.some((k) => !!process.env[k])) {
+    if (hasOauthLogin(id, binary)) return { ok: true };
     const envList = envs.length === 1 ? envs[0] : envs.join(" or ");
     return {
       ok: true,
@@ -73,6 +74,27 @@ function checkCli(id: string, binary: string): HealthResult {
     };
   }
   return { ok: true };
+}
+
+// Detect when a CLI is authenticated via its own OAuth flow (no env var set). Only
+// implemented per-backend where the CLI exposes a quick non-interactive probe.
+function hasOauthLogin(id: string, binary: string): boolean {
+  if (id === "codex") {
+    try {
+      const out = execFileSync(binary, ["login", "status"], {
+        timeout: 5000,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return /logged in/i.test(out);
+    } catch {
+      return false;
+    }
+  }
+  // claude has no equivalent `claude login status` CLI subcommand (state lives in the
+  // macOS keychain). gemini auth state likewise requires a heavier probe. Skip both
+  // here — the warning copy already covers OAuth-logged-in users.
+  return false;
 }
 
 async function checkHttp(endpoint: string): Promise<HealthResult> {
