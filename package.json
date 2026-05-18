@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build:mcpb": "mcpb pack mcpb dist-mcpb/inspectrum-0.1.1.mcpb",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build && vitest run tests/e2e",
