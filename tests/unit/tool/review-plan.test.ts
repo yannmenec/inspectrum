@@ -108,6 +108,30 @@ describe("reviewPlan", () => {
     ).rejects.toThrow(/all reviewers failed/i);
   });
 
+  it("embeds per-reviewer failure reasons in the 'All reviewers failed' error message", async () => {
+    // Two reviewers both fail with distinct errors — both messages must appear.
+    mockCreateReviewer
+      .mockReturnValueOnce({
+        id: "codex",
+        review: vi.fn().mockRejectedValue(new Error("codex exited with code 1. stderr: 401 Unauthorized")),
+      })
+      .mockReturnValueOnce({
+        id: "gemini",
+        review: vi.fn().mockRejectedValue(new Error("gemini exited with code 1. stderr: GEMINI_API_KEY not set")),
+      });
+    const cfg: Config = {
+      ...makeConfig(tmpDir),
+      defaults: { reviewers: ["codex", "gemini"], judge: "codex", focus: "all" },
+      reviewers: {
+        codex: { type: "cli", binary: "codex" },
+        gemini: { type: "cli", binary: "gemini" },
+      },
+    };
+    await expect(
+      reviewPlan({ plan: "# Plan", reviewers: ["codex", "gemini"], judge: false }, cfg),
+    ).rejects.toThrow(/codex.*401 Unauthorized[\s\S]*gemini.*GEMINI_API_KEY/);
+  });
+
   it("throws when no reviewers configured", async () => {
     const cfg: Config = { ...makeConfig(tmpDir), defaults: { ...makeConfig(tmpDir).defaults, reviewers: [] } };
     await expect(reviewPlan({ plan: "# Plan" }, cfg)).rejects.toThrow(/no reviewers/i);

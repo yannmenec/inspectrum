@@ -56,7 +56,10 @@ export async function reviewPlan(
     }
   }
 
-  if (successfulReviews.length === 0) throw new Error("All reviewers failed");
+  if (successfulReviews.length === 0) {
+    const reasons = operationalFindings.map((f) => `  - ${f.message}`).join("\n");
+    throw new Error(`All reviewers failed:\n${reasons}`);
+  }
 
   // Run judge to consolidate if enabled and we have ≥ 2 successful reviews
   let finalReviews = successfulReviews;
