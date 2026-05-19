@@ -62,25 +62,27 @@ export function mergeReviewerArgs(
 
 export const RAW_REVIEW_JSON_SCHEMA = JSON.stringify({
   type: "object",
-  required: ["verdict", "findings"],
+  additionalProperties: false,
+  required: ["verdict", "findings", "revised_plan", "summary"],
   properties: {
     verdict: { type: "string", enum: ["approve", "revise", "reject"] },
     findings: {
       type: "array",
       items: {
         type: "object",
-        required: ["severity", "category", "reviewer", "message"],
+        additionalProperties: false,
+        required: ["severity", "category", "reviewer", "message", "suggested_fix"],
         properties: {
           severity: { type: "string", enum: ["blocker", "major", "minor", "nit"] },
           category: { type: "string", enum: ["correctness", "completeness", "risk", "clarity"] },
           reviewer: { type: "string" },
           message: { type: "string" },
-          suggested_fix: { type: "string" },
+          suggested_fix: { type: ["string", "null"] },
         },
       },
     },
-    revised_plan: { type: "string" },
-    summary: { type: "string" },
+    revised_plan: { type: ["string", "null"] },
+    summary: { type: ["string", "null"] },
   },
 });
 
@@ -318,7 +320,7 @@ async function runClaudeJsonReview(opts: {
 const CODEX_RESERVED: ReservedFlags = {
   // `exec` is the codex subcommand we always inject; if a user re-passes it,
   // drop the duplicate. `--ephemeral` is a bool flag.
-  bool: ["exec", "--ephemeral"],
+  bool: ["exec", "--ephemeral", "--skip-git-repo-check"],
   paired: ["-m", "--model", "--output-schema", "--output-last-message"],
 };
 
@@ -331,7 +333,7 @@ async function runCodexJsonReview(opts: {
   label: string;
 }): Promise<RawReview> {
   const binary = opts.config.binary ?? "codex";
-  const model = extractModel(opts.config, "gpt-5");
+  const model = extractModel(opts.config);
   const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-codex-"));
   const schemaFile = join(tempDir, "schema.json");
   const outputFile = join(tempDir, "output.json");
@@ -342,8 +344,8 @@ async function runCodexJsonReview(opts: {
     const args = [
       "exec",
       "--ephemeral",
-      "-m",
-      model,
+      "--skip-git-repo-check",
+      ...(model ? ["-m", model] : []),
       "--output-schema",
       schemaFile,
       "--output-last-message",
@@ -421,11 +423,17 @@ async function runQwenJsonReview(opts: {
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
 }
 
-function extractModel(config: ReviewerConfig, defaultModel: string): string {
+function extractModel(config: ReviewerConfig, defaultModel: string): string;
+function extractModel(config: ReviewerConfig, defaultModel?: undefined): string | undefined;
+function extractModel(config: ReviewerConfig, defaultModel?: string): string | undefined {
   if (config.model) return config.model;
   const args = config.args ?? [];
-  const idx = args.findIndex((a) => a === "-m" || a === "--model");
-  if (idx !== -1 && idx + 1 < args.length) return args[idx + 1]!;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if ((a === "-m" || a === "--model") && i + 1 < args.length) return args[i + 1]!;
+    if (a.startsWith("--model=")) return a.slice("--model=".length);
+    if (a.startsWith("-m=")) return a.slice("-m=".length);
+  }
   return defaultModel;
 }
 
@@ -509,6 +517,19 @@ function parseClaudeOutput(raw: string, reviewerId: string, label: string): RawR
   return parseRawReview(envelope.data.result, reviewerId, label);
 }
 
+function dropNullKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(dropNullKeys);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v === null) continue;
+      out[k] = dropNullKeys(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 function parseRawReview(raw: string, reviewerId: string, label: string): RawReview {
   let parsed: unknown;
   try {
@@ -517,7 +538,8 @@ function parseRawReview(raw: string, reviewerId: string, label: string): RawRevi
     throw new ReviewerOperationalError(`${label} reviewer returned non-JSON output: ${raw.slice(0, 200)}`);
   }
 
-  const review = RawReviewSchema.safeParse(parsed);
+  const cleaned = dropNullKeys(parsed);
+  const review = RawReviewSchema.safeParse(cleaned);
   if (!review.success) {
     throw new ReviewerOperationalError(`${label} reviewer result failed schema validation: ${review.error.message}`);
   }
