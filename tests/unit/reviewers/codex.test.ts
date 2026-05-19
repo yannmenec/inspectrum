@@ -196,15 +196,92 @@ describe("CodexReviewer", () => {
     expect(result.findings[0]!.reviewer).toBe("my-codex");
   });
 
-  it("falls back to default model when no model in config", async () => {
+  it("omits -m flag when no model is configured", async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
     mockSpawn.mockReturnValue(makeMockProcess(0));
     const minimalCfg: ReviewerConfig = { type: "cli" };
     const reviewer = new CodexReviewer("codex", minimalCfg);
     await reviewer.review("# Plan", "all");
     const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).not.toContain("-m");
+  });
+
+  it("always passes --skip-git-repo-check", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const minimalCfg: ReviewerConfig = { type: "cli" };
+    await new CodexReviewer("codex", minimalCfg).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).toContain("--skip-git-repo-check");
+  });
+
+  it("passes -m when config.model is set, even without args", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgWithOnlyModel: ReviewerConfig = { type: "cli", model: "gpt-5" };
+    await new CodexReviewer("codex", cfgWithOnlyModel).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
     const mIdx = args.indexOf("-m");
+    expect(mIdx).toBeGreaterThanOrEqual(0);
     expect(args[mIdx + 1]).toBe("gpt-5");
+  });
+
+  it("honors inline --model=<value> in config.args", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgInline: ReviewerConfig = { type: "cli", args: ["--model=gpt-5"] };
+    await new CodexReviewer("codex", cfgInline).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    const mIdx = args.indexOf("-m");
+    expect(mIdx).toBeGreaterThanOrEqual(0);
+    expect(args[mIdx + 1]).toBe("gpt-5");
+  });
+
+  it("writes a JSON schema satisfying OpenAI strict mode at every object level", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    await new CodexReviewer("codex", cfg).review("# Plan", "all");
+    const schemaWritten = vi.mocked(fs.writeFileSync).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(schemaWritten) as Record<string, unknown>;
+
+    const visit = (node: unknown, path: string): void => {
+      if (!node || typeof node !== "object") return;
+      const obj = node as Record<string, unknown>;
+      if (obj["type"] === "object") {
+        expect(obj["additionalProperties"], `${path}: additionalProperties must be false`).toBe(false);
+        const props = obj["properties"] as Record<string, unknown> | undefined;
+        const required = obj["required"] as string[] | undefined;
+        expect(required, `${path}: required[] must exist`).toBeDefined();
+        expect(new Set(required), `${path}: required[] must cover every key in properties`)
+          .toEqual(new Set(Object.keys(props ?? {})));
+      }
+      for (const [k, v] of Object.entries(obj)) visit(v, `${path}.${k}`);
+    };
+    visit(parsed, "$");
+
+    const nullable = ["string", "null"];
+    const props = parsed["properties"] as Record<string, Record<string, unknown>>;
+    expect(props["summary"]!["type"]).toEqual(nullable);
+    expect(props["revised_plan"]!["type"]).toEqual(nullable);
+    const findings = props["findings"] as { items: { properties: Record<string, Record<string, unknown>> } };
+    expect(findings.items.properties["suggested_fix"]!["type"]).toEqual(nullable);
+  });
+
+  it("strips null optional fields from a strict-mode codex response", async () => {
+    const strict = {
+      verdict: "approve",
+      findings: [{ severity: "minor", category: "clarity", reviewer: "codex", message: "ok", suggested_fix: null }],
+      revised_plan: null,
+      summary: null,
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(strict) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const result = await new CodexReviewer("codex", cfg).review("# Plan", "all");
+    expect(result.verdict).toBe("approve");
+    expect(result.summary).toBeUndefined();
+    expect(result.revised_plan).toBeUndefined();
+    expect(result.findings[0]!.suggested_fix).toBeUndefined();
+    expect(result.summary).not.toBeNull();
   });
 
   it("includes context in the stdin message when provided", async () => {
@@ -226,7 +303,7 @@ describe("CodexReviewer", () => {
       type: "cli",
       backend: "codex",
       model: "gpt-5",
-      args: ["--full-auto", "-m", "ignored-model"],
+      args: ["--full-auto", "--skip-git-repo-check", "-m", "ignored-model"],
     };
     const reviewer = new CodexReviewer("codex", cfgWithArgs);
     await reviewer.review("# Plan", "all");
@@ -234,6 +311,7 @@ describe("CodexReviewer", () => {
     expect(args).toContain("--full-auto");
     expect(args.filter((a) => a === "-m")).toHaveLength(1);
     expect(args).not.toContain("ignored-model");
+    expect(args.filter((a) => a === "--skip-git-repo-check")).toHaveLength(1);
     // Positional system prompt must stay last
     expect(args[args.length - 1]).toContain("reviewer");
   });

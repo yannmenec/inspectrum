@@ -224,6 +224,7 @@ npx -y inspectrum@latest doctor
 - Session logs live at `~/.inspectrum/sessions/<timestamp>__<id>/` and contain your full plan + each reviewer's transcript. v0.1.0 sets the directory permissions to **0700 on POSIX** so other users on the same machine can't read them. Sessions written by older versions stay on their original perms — retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
 - **Never paste secrets into the plan or context.** They get written to disk and sent to every active reviewer.
 - Cloud routes (what gets sent where): **claude** → Anthropic via Claude Code OAuth keychain or `ANTHROPIC_API_KEY`; **codex** → OpenAI via ChatGPT login or `OPENAI_API_KEY`; **gemini** → Google via `gemini auth` or `GEMINI_API_KEY`; **kimi** → Moonshot via `MOONSHOT_API_KEY` *(experimental)*; **qwen** → Alibaba DashScope via `DASHSCOPE_API_KEY` *(experimental)*; **openrouter** → openrouter.ai → upstream provider chosen by `model`, via `OPENROUTER_API_KEY`; **ollama** → localhost only, with no network egress unless you reconfigure `endpoint`.
+- **Codex flags inspectrum passes.** `codex exec --skip-git-repo-check --ephemeral …`. `--skip-git-repo-check` bypasses codex 0.131's per-project trust prompt so plan review works from any cwd without first adding the directory to `~/.codex/config.toml`. `--ephemeral` keeps codex from persisting session files — it does *not* control the sandbox. inspectrum does **not** pass `--dangerously-bypass-approvals-and-sandbox`; whatever sandbox/approval defaults you have in `~/.codex/config.toml` still apply.
 
 </details>
 
