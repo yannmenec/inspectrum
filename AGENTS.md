@@ -12,12 +12,12 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 ## What this repo is
 
 - A single MCP server (`src/server.ts`) exposing one tool: `review_plan`.
-- Wraps peer LLM CLIs via `child_process` (Claude / Codex / Gemini), aggregates
-  their findings, optionally runs a judge agent for consolidation, writes a
-  flat-Markdown session log to `~/.inspectrum/sessions/<ts>__<id>/`.
-- v0.1 = plan-only review. v0.2+ extends to code/PR review and more reviewer
-  backends (Kimi, Qwen, Ollama, OpenRouter). Stay inside the current scope
-  unless an ADR or PR explicitly opens a new surface.
+- Wraps peer LLM backends via `child_process` or HTTP (Claude / Codex / Gemini /
+  Kimi / Qwen / Ollama / OpenRouter), aggregates their findings, optionally runs
+  a judge agent for consolidation, writes a flat-Markdown session log to
+  `~/.inspectrum/sessions/<ts>__<id>/`.
+- v0.1 = plan-only review. v0.2+ extends to code/PR review. Stay inside the
+  current scope unless an ADR or PR explicitly opens a new surface.
 
 ## Setup & dev loop
 
@@ -36,7 +36,7 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 - `src/schemas.ts` — central Zod v4 schemas. All schemas live here, not per module.
 - `src/config.ts` — `~/.inspectrum/config.toml` loader (`@iarna/toml` + Zod).
 - `src/tool/review-plan.ts` — orchestration, parallel reviewers, verdict aggregation, report assembly, session write.
-- `src/reviewers/` — `index.ts` (factory) + `claude.ts`, `codex.ts`, `gemini.ts` (CLI wrappers) + `health.ts` (doctor) + `common.ts` (shared helpers).
+- `src/reviewers/` — `index.ts` (factory) + `claude.ts`, `codex.ts`, `gemini.ts`, `kimi.ts`, `qwen.ts`, `ollama.ts`, `openrouter.ts` (backends) + `health.ts` (doctor) + `common.ts` (shared helpers).
 - `src/judge/judge.ts` — consolidation pass with `validateJudgeInvariants`.
 - `src/prompts/index.ts` — `REVIEWER_SYSTEM_PROMPT`, `JUDGE_SYSTEM_PROMPT` as inline TS strings, NOT loaded from `.md`.
 - `src/session/{store,resources}.ts` — flat-file persistence + MCP resource exposure.
@@ -87,7 +87,6 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 ## Engineering principles
 
 - TDD for new modules; regression test for every bug fix, referencing the issue or symptom in the test name.
-- YAGNI + KISS over premature abstraction. DRY only after 3 occurrences.
 - Hexagonal ports/adapters for every external integration (CLI reviewer, HTTP reviewer, filesystem).
 - Trunk-based dev; short-lived branches (< 48 h).
 - Any change to an architecture invariant requires an ADR under `_decisions/ADR-NNNN-*.md`.
@@ -107,8 +106,6 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 
 ## When in doubt
 
-- Read first (`Read`, `grep`, `rg`). Do not invent file paths, function names, or library APIs.
-- Ask a concise clarifying question rather than guess.
 - If a change touches an architecture invariant, draft an ADR before coding.
 
 ## Out of scope (today)
