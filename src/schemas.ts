@@ -108,9 +108,72 @@ export const ConfigSchema = z.object({
       timeout_seconds: z.number().int().default(300),
     })
     .default({ plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 300 }),
+  plan_gate: z
+    .object({
+      enabled: z.boolean().default(true),
+      max_rounds: z.number().int().positive().default(2),
+      reviewers: z.array(z.string()).optional(),
+      reason_max_chars: z.number().int().positive().default(3000),
+    })
+    .default({ enabled: true, max_rounds: 2, reason_max_chars: 3000 }),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
+
+// --- Plan gate (Claude Code PreToolUse hook on ExitPlanMode) ---
+
+/**
+ * Stdin payload Claude Code sends to PreToolUse hooks. Loose on purpose:
+ * unknown fields from future Claude Code versions must never fail the gate.
+ * tool_input.plan holds the plan markdown; planFilePath is the on-disk
+ * fallback some versions write instead.
+ */
+export const HookInputSchema = z.looseObject({
+  session_id: z.string().optional(),
+  transcript_path: z.string().optional(),
+  cwd: z.string().optional(),
+  hook_event_name: z.string().optional(),
+  tool_name: z.string().optional(),
+  tool_input: z
+    .looseObject({
+      plan: z.string().optional(),
+      planFilePath: z.string().optional(),
+    })
+    .optional(),
+});
+
+export type HookInput = z.infer<typeof HookInputSchema>;
+
+export const PlanGateStateSchema = z.object({
+  session_key: z.string(),
+  rounds_used: z.number().int().nonnegative().default(0),
+  approved_hashes: z.array(z.string()).default([]),
+  denied: z
+    .array(z.object({ hash: z.string(), reason: z.string(), at: z.string() }))
+    .default([]),
+  updated_at: z.string(),
+});
+
+export type PlanGateState = z.infer<typeof PlanGateStateSchema>;
+
+/**
+ * Locks the stdout contract of `inspectrum plan-gate`. permissionDecision is
+ * only ever "deny" — an approve outcome omits hookSpecificOutput entirely so
+ * Claude Code's normal plan-approval dialog still reaches the user.
+ */
+export const PreToolUseDecisionSchema = z.object({
+  hookSpecificOutput: z
+    .object({
+      hookEventName: z.literal("PreToolUse"),
+      permissionDecision: z.literal("deny"),
+      permissionDecisionReason: z.string(),
+    })
+    .optional(),
+  systemMessage: z.string().optional(),
+  suppressOutput: z.boolean().optional(),
+});
+
+export type PreToolUseDecision = z.infer<typeof PreToolUseDecisionSchema>;
 
 export const OllamaResponseSchema = z.object({
   message: z.object({ content: z.string() }),

@@ -11,6 +11,7 @@ export default defineConfig({
         "src/tool/**",
         "src/reviewers/**",
         "src/judge/**",
+        "src/hook/**",
         "src/config.ts",
         "src/doctor.ts",
         "src/server/**",
