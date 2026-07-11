@@ -38,9 +38,13 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 - `src/tool/review-plan.ts` — orchestration, parallel reviewers, verdict aggregation, report assembly, session write.
 - `src/reviewers/` — `index.ts` (factory) + `claude.ts`, `codex.ts`, `gemini.ts` (CLI wrappers) + `health.ts` (doctor) + `common.ts` (shared helpers).
 - `src/judge/judge.ts` — consolidation pass with `validateJudgeInvariants`.
+- `src/hook/{state,render,plan-gate}.ts` — ExitPlanMode plan gate: hash/state loop-protection, budgeted deny rendering, hook orchestration (`inspectrum plan-gate`; ADR-0002).
 - `src/prompts/index.ts` — `REVIEWER_SYSTEM_PROMPT`, `JUDGE_SYSTEM_PROMPT` as inline TS strings, NOT loaded from `.md`.
 - `src/session/{store,resources}.ts` — flat-file persistence + MCP resource exposure.
-- `tests/{contract,unit,e2e}/` — Vitest. Fixtures under `tests/fixtures/`. (`integration/` deferred — see `_decisions/ADR-0001-defer-integration-tests.md`.)
+- `src/version.ts` — single source for the package version (server metadata + CLI).
+- `.claude-plugin/` + `hooks/` + `commands/` + `scripts/plan-gate-shim.sh` — Claude Code plugin; the repo doubles as its marketplace.
+- `scripts/e2e-plan-gate.sh` — headless plan-mode E2E harness (`npm run e2e:gate`).
+- `tests/{contract,unit,e2e}/` — Vitest. Fixtures under `tests/fixtures/`. `tests/integration/` is opt-in-only (`INSPECTRUM_E2E_CODEX=1`, real codex smoke — ADR-0002); broader integration remains deferred per ADR-0001.
 
 ## Testing
 
@@ -48,12 +52,13 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 - Contract tests in `tests/contract/` lock the MCP tool I/O shape — do not relax their assertions to make a change land.
 - Unit tests mock `node:child_process` (vitest mocks) and HTTP via `nock`.
 - Canonical plans live in `tests/fixtures/plans/`. Snapshot reports under `tests/fixtures/reports/`.
-- Coverage gate (`vitest.config.ts`): ≥ 90 % lines, ≥ 90 % functions, ≥ 90 % branches on `src/tool/**`, `src/reviewers/**`, `src/judge/**`, `src/config.ts`, `src/doctor.ts`, `src/server/**`, `src/session/**`. Do not lower these.
+- Coverage gate (`vitest.config.ts`): ≥ 90 % lines, ≥ 90 % functions, ≥ 90 % branches on `src/tool/**`, `src/reviewers/**`, `src/judge/**`, `src/hook/**`, `src/config.ts`, `src/doctor.ts`, `src/server/**`, `src/session/**`. Do not lower these.
 - Never commit failing tests; the pre-commit hook will block.
 
 ## Architecture invariants
 
-- Exactly one MCP tool: `review_plan`. A second tool requires an ADR.
+- Exactly one MCP tool: `review_plan`. A second tool requires an ADR. The plan gate is a CLI subcommand (`inspectrum plan-gate`), not a tool (ADR-0002).
+- The plan gate fails OPEN: no operational error may block ExitPlanMode, and an approve verdict never auto-accepts the plan (the user's approval dialog must still appear).
 - Every Zod schema lives in `src/schemas.ts`. No scattered `z.object({...})` per file.
 - Reviewer factory: every backend implements the `Reviewer` interface in `src/reviewers/index.ts`. `src/tool/review-plan.ts` never imports a concrete reviewer module directly.
 - Prompts are TS strings in `src/prompts/index.ts`. No `fs.readFile` of prompt `.md` at runtime.
@@ -66,7 +71,7 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
   - `z.record(keySchema, valueSchema)` needs *two* arguments — the single-arg form was removed.
   - `.default({})` on a sub-object does NOT propagate nested defaults. When validating config, always provide the fully shaped default object explicitly.
 - **Session writes are atomic and path-traversal-guarded** (J3 hardening). `src/session/store.ts` writes to a tmp path then renames; session IDs are validated to reject `..`. Never bypass these helpers — call `writeSession` / `readSessionFile`.
-- **Truncation marker.** Any text trimmed to fit caps ends with the literal `[...truncated]`. Hard caps: `plan ≤ 16000` chars, `context ≤ 8000` chars, reviewer wallclock `≤ 60s`. These caps are encoded in `src/schemas.ts` — do not silently raise them.
+- **Truncation marker.** Any text trimmed to fit caps ends with the literal `[...truncated]`. Hard caps: `plan ≤ 16000` chars, `context ≤ 8000` chars, reviewer wallclock default `300s` (`limits.timeout_seconds`, per-reviewer `timeout_seconds` override), plan-gate deny reason ≤ `plan_gate.reason_max_chars` (3000). These caps are encoded in `src/schemas.ts` — do not silently raise them.
 - **Health checks** in `src/reviewers/health.ts` use `execFileSync` on purpose (simpler to mock than `promisify(exec)`). Keep this pattern when adding a backend.
 
 ## Security & safety
