@@ -1,0 +1,10 @@
+{
+  "name": "inspectrum",
+  "version": "0.2.0",
+  "description": "Automatic Codex review of Claude Code plans before approval, plus /inspectrum:review on demand.",
+  "author": { "name": "Yann Menec" },
+  "homepage": "https://github.com/yannmenec/inspectrum",
+  "repository": "https://github.com/yannmenec/inspectrum",
+  "license": "MIT",
+  "keywords": ["plan-review", "plan-mode", "codex", "mcp", "hooks"]
+}
