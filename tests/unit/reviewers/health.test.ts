@@ -7,6 +7,11 @@ import { checkReviewer } from "../../../src/reviewers/health.js";
 import type { ReviewerConfig } from "../../../src/schemas.js";
 
 const mockExecFileSync = vi.mocked(childProcess.execFileSync);
+const mockSpawnSync = vi.mocked(childProcess.spawnSync);
+
+function spawnSyncResult(status: number, stdout: string, stderr: string): ReturnType<typeof childProcess.spawnSync> {
+  return { status, stdout, stderr } as never;
+}
 
 // Env vars checked by health.ts for CLI auth detection. Cleared in beforeEach
 // so tests are deterministic regardless of the developer's local environment.
@@ -102,24 +107,32 @@ describe("checkReviewer — CLI", () => {
     });
 
     it("warns when codex binary found but OPENAI_API_KEY unset and `codex login status` fails", async () => {
-      mockExecFileSync.mockImplementation((_bin: string, args: readonly string[]) => {
-        if (args[0] === "--version") return "codex 1.0" as unknown as Buffer;
-        // login status fails → not logged in
-        throw new Error("login status: not authenticated");
-      });
+      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockSpawnSync.mockReturnValue(spawnSyncResult(1, "", "Not logged in"));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
       expect(result.ok).toBe(true);
       expect(result.warning).toMatch(/OPENAI_API_KEY/);
     });
 
-    it("does NOT warn when codex `login status` reports Logged in (OAuth via ChatGPT)", async () => {
-      mockExecFileSync.mockImplementation((_bin: string, args: readonly string[]) => {
-        if (args[0] === "--version") return "codex 1.0" as unknown as Buffer;
-        if (args[0] === "login" && args[1] === "status") return "Logged in using ChatGPT" as unknown as Buffer;
-        throw new Error("unexpected call");
-      });
+    it("does NOT warn when codex `login status` reports Logged in on stdout (codex ≤0.131)", async () => {
+      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockSpawnSync.mockReturnValue(spawnSyncResult(0, "Logged in using ChatGPT", ""));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
       expect(result).toEqual({ ok: true });
+    });
+
+    it("does NOT warn when codex `login status` reports Logged in on stderr (codex 0.144+ regression)", async () => {
+      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockSpawnSync.mockReturnValue(spawnSyncResult(0, "", "Logged in using ChatGPT"));
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it("treats a zero-status login probe without the magic words as logged out", async () => {
+      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockSpawnSync.mockReturnValue(spawnSyncResult(0, "", ""));
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result.warning).toMatch(/OPENAI_API_KEY/);
     });
 
     it("warns when gemini binary found and none of GEMINI_API_KEY/GOOGLE_API_KEY/GOOGLE_GENAI_USE_VERTEXAI is set", async () => {

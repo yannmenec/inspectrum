@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import type { ReviewerConfig } from "../schemas.js";
 
 export interface HealthResult {
@@ -81,12 +81,14 @@ function checkCli(id: string, binary: string): HealthResult {
 function hasOauthLogin(id: string, binary: string): boolean {
   if (id === "codex") {
     try {
-      const out = execFileSync(binary, ["login", "status"], {
+      // codex ≤0.131 printed the status to stdout; 0.144+ prints to stderr.
+      // spawnSync (not execFileSync) because we need both streams on success.
+      const out = spawnSync(binary, ["login", "status"], {
         timeout: 5000,
         encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
+        stdio: ["ignore", "pipe", "pipe"],
       });
-      return /logged in/i.test(out);
+      return out.status === 0 && /logged in/i.test(`${out.stdout ?? ""}${out.stderr ?? ""}`);
     } catch {
       return false;
     }
