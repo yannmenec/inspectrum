@@ -1,6 +1,6 @@
 {
   "name": "inspectrum",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Universal MCP server for multi-LLM plan review",
   "type": "module",
   "bin": {
@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "build:mcpb": "mcpb pack mcpb dist-mcpb/inspectrum-0.1.1.mcpb",
+    "build:mcpb": "mcpb pack mcpb dist-mcpb/inspectrum-0.2.0.mcpb",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build && vitest run tests/e2e",
