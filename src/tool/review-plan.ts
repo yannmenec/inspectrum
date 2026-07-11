@@ -31,7 +31,7 @@ export async function reviewPlan(
       try {
         const reviewerConfig = config.reviewers[id] as NonNullable<(typeof config.reviewers)[string]> | undefined;
         if (!reviewerConfig) throw new Error(`Reviewer "${id}" not found in config`);
-        const reviewer = createReviewer(id, reviewerConfig);
+        const reviewer = createReviewer(id, reviewerConfig, config.limits);
         return await reviewer.review(input.plan, input.focus, input.context);
       } finally {
         completedReviewers += 1;

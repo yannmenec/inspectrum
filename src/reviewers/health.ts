@@ -115,7 +115,7 @@ async function checkHttp(endpoint: string): Promise<HealthResult> {
 function installFix(id: string): string {
   const fixes: Record<string, string> = {
     claude: "Install Claude Code: https://claude.ai/download",
-    codex: "Install Codex: https://codex.com/download",
+    codex: "Install Codex CLI: npm install -g @openai/codex",
     gemini: "Install Gemini CLI: npm install -g @google/gemini-cli",
     kimi: "Install Kimi CLI: uv tool install --python 3.13 kimi-cli",
     qwen: "Install Qwen Code CLI: npm install -g @qwen-code/qwen-code@latest",

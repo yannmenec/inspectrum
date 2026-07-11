@@ -315,4 +315,53 @@ describe("CodexReviewer", () => {
     // Positional system prompt must stay last
     expect(args[args.length - 1]).toContain("reviewer");
   });
+
+  it("always passes -s read-only", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    await new CodexReviewer("codex", { type: "cli" }).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    const sIdx = args.indexOf("-s");
+    expect(sIdx).toBeGreaterThanOrEqual(0);
+    expect(args[sIdx + 1]).toBe("read-only");
+  });
+
+  it("strips a user-provided sandbox flag so read-only stays authoritative", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgSandbox: ReviewerConfig = { type: "cli", args: ["--sandbox", "danger-full-access"] };
+    await new CodexReviewer("codex", cfgSandbox).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).not.toContain("--sandbox");
+    expect(args).not.toContain("danger-full-access");
+    expect(args[args.indexOf("-s") + 1]).toBe("read-only");
+  });
+
+  it("passes -c model_reasoning_effort=<effort> when effort is configured", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgEffort: ReviewerConfig = { type: "cli", effort: "high" };
+    await new CodexReviewer("codex", cfgEffort).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    const cIdx = args.indexOf("-c");
+    expect(cIdx).toBeGreaterThanOrEqual(0);
+    expect(args[cIdx + 1]).toBe("model_reasoning_effort=high");
+  });
+
+  it("passes unrecognized effort values through verbatim (no enum)", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgEffort: ReviewerConfig = { type: "cli", effort: "ultra" };
+    await new CodexReviewer("codex", cfgEffort).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args[args.indexOf("-c") + 1]).toBe("model_reasoning_effort=ultra");
+  });
+
+  it("omits -c model_reasoning_effort when effort is unset", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    await new CodexReviewer("codex", { type: "cli" }).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args.some((a) => a.startsWith("model_reasoning_effort="))).toBe(false);
+  });
 });
