@@ -1,14 +1,10 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { getPackageVersion } from "./version.js";
 
 const command = process.argv[2];
 
 if (command === "--version" || command === "-v") {
-  const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
-  process.stdout.write(`${pkg.version}\n`);
+  process.stdout.write(`${getPackageVersion()}\n`);
   process.exit(0);
 } else if (command === "--help" || command === "-h") {
   process.stdout.write(
