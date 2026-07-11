@@ -1,0 +1,12 @@
+{
+  "name": "inspectrum",
+  "description": "Peer-LLM plan review for coding agents: automatic Codex gate on Claude Code plan mode.",
+  "owner": { "name": "Yann Menec", "url": "https://github.com/yannmenec" },
+  "plugins": [
+    {
+      "name": "inspectrum",
+      "source": "./",
+      "description": "Codex plan gate for Claude Code plan mode + on-demand peer-LLM plan review"
+    }
+  ]
+}
