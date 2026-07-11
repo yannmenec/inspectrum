@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config.js";
+import { getPackageVersion } from "./version.js";
 import { listSessions } from "./session/store.js";
 import { buildSessionsIndex } from "./session/resources.js";
 import {
@@ -14,7 +15,7 @@ import {
 } from "./server/handlers.js";
 
 const server = new McpServer(
-  { name: "inspectrum", version: "0.1.0" },
+  { name: "inspectrum", version: getPackageVersion() },
   { capabilities: { tools: {}, resources: {} } },
 );
 

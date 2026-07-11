@@ -228,6 +228,15 @@ npx -y inspectrum@latest doctor
 
 </details>
 
+## Troubleshooting
+
+**`sh: inspectrum: command not found` / `claude mcp list` shows `✗ Failed to connect` — but only when your current directory is the inspectrum repo itself.** `npx inspectrum@<version>` resolves the spec against the *local* package when cwd is inside a package named `inspectrum` whose version matches, and a package's own bin is never self-linked into its `node_modules/.bin`. The published package is fine. Fixes: run from any other directory, or install the real binary once and register that instead:
+
+```bash
+npm install -g inspectrum
+claude mcp add --transport stdio --scope user inspectrum -- inspectrum
+```
+
 ## License + author
 
 MIT — [Yann Menec](https://github.com/yannmenec). Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
