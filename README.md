@@ -29,27 +29,33 @@ No JSON editing, no API keys. Paste one prompt; you're done.
 
 ### If you use Claude Code
 
-Paste this into a fresh Claude Code chat. It installs the Codex CLI, wires inspectrum into your MCP config, and tells you whether you still need to finish a one-time Codex login.
+**The plan gate (recommended).** Two commands install a plugin that reviews every plan with Codex *before* the approval dialog appears — Codex findings bounce the plan back to Claude for revision (max 2 rounds), and only reviewed plans reach you:
+
+```bash
+claude plugin marketplace add yannmenec/inspectrum
+claude plugin install inspectrum@inspectrum
+```
+
+You also need the Codex CLI (`npm install -g @openai/codex`, then run `codex` once to sign in with your ChatGPT account) — paste this into a Claude Code chat if you'd rather have the agent check everything:
 
 ````text
-Set up inspectrum so I can review my plans with Codex. Use normal
-approvals only — do not switch to Bypass Permissions or Full Access.
+Set up inspectrum's Codex plan gate. Use normal approvals only — do not
+switch to Bypass Permissions or Full Access.
 
 Steps:
 1. Run `node --version`. If < 20, stop and tell me to install Node 20+
    from https://nodejs.org first.
 2. Run `codex --version`. If "command not found", run
    `npm install -g @openai/codex` and verify again.
-3. If `~/.inspectrum/config.toml` does not exist, create it with:
-
-   [defaults]
-   reviewers = ["codex"]
-
+3. Run `claude plugin marketplace add yannmenec/inspectrum`, then
+   `claude plugin install inspectrum@inspectrum`.
 4. Run `claude mcp add --transport stdio --scope user inspectrum -- npx -y inspectrum@latest`
-5. Run `npx -y inspectrum@latest doctor` and show me the output.
+   (this powers the on-demand /inspectrum:review command).
+5. Run `npx -y inspectrum@latest doctor` and show me the output,
+   including the resolved codex model/effort lines.
 6. Run `codex login status`.
-   - If it prints "Logged in", tell me: "✅ Setup complete. Just ask
-     me to 'Review this plan with inspectrum' on any plan." Done.
+   - If it prints "Logged in", tell me: "✅ Setup complete. Your next
+     plan-mode plan gets a Codex review automatically." Done.
    - Otherwise (not logged in), pop open a Terminal window with codex
      already running by executing:
        `osascript -e 'tell application "Terminal" to do script "codex"'`
@@ -62,6 +68,32 @@ Do NOT use sudo, edit shell profiles, push git changes, read .env or
 credentials, or publish packages. Report back: Node version, codex
 install status, doctor verdict, and whether login was needed.
 ````
+
+**How the gate behaves.** When Claude finishes a plan in plan mode, the hook runs `inspectrum plan-gate`: verdict `approve` → your normal approval dialog appears (plus a one-line confirmation); `revise`/`reject` → Claude receives the findings and revises before you ever see the plan (max 2 rounds, then it passes through with a warning). Identical plans are never reviewed twice (hash cache), and *any* failure — Codex not installed, logged out, timeout — fails open: your plan proceeds, with a visible warning. Kill switch: `[plan_gate] enabled = false` in `~/.inspectrum/config.toml`, or disable the plugin per project.
+
+<details>
+<summary>Manual hook install (no plugin)</summary>
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          { "type": "command", "command": "npx -y inspectrum@latest plan-gate", "timeout": 600 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+If you hack on inspectrum itself, prefer `npm install -g inspectrum` and `"command": "inspectrum plan-gate"` — see Troubleshooting.
+
+</details>
 
 ### If you use Codex Desktop
 
@@ -104,21 +136,22 @@ After the one-time login (if needed), you're set.
 
 ## Use
 
-Before approving a plan, ask:
+With the plugin installed, **plan mode is the workflow** — every plan is reviewed automatically before you see it. No prompt, no button, no tokens spent on triggering.
+
+On demand (any host with the MCP server registered), use `/inspectrum:review [reviewers]` or just ask:
 
 ```text
 Review this plan with inspectrum.
 ```
 
-Or make it automatic by adding one paragraph to your project's `CLAUDE.md` / `AGENTS.md`:
+**Which model reviews, at which effort?** Nobody "asks" for the review — the hook is deterministic code, so it works the same whether your session runs Fable 5, Sonnet or Haiku. On the Codex side, precedence is:
 
-```text
-Before finalizing any implementation plan, call the `review_plan` MCP
-tool (inspectrum) with the available reviewers. Skip only if I explicitly
-say "no review".
-```
+| Setting | 1st (wins) | 2nd | 3rd |
+|---|---|---|---|
+| model | `[reviewers.codex] model` in `~/.inspectrum/config.toml` | `model` in `~/.codex/config.toml` | codex built-in default |
+| reasoning effort | `[reviewers.codex] effort` | `model_reasoning_effort` in `~/.codex/config.toml` | codex built-in default |
 
-**Modal caveat.** Once Claude Desktop or the Codex app shows the Accept / Revise / Reject prompt, free chat is blocked — trigger the review before the modal, or rely on the auto-run paragraph above.
+`inspectrum doctor` prints the resolved values. High/ultra effort gives the deepest reviews but can take minutes per plan — set `effort = "high"` (or `"medium"`) in `[reviewers.codex]` if the gate feels slow.
 
 ## What you get
 
@@ -147,6 +180,17 @@ reviewers = ["codex", "gemini"]   # called in parallel
 judge     = "codex"               # consolidates when >= 2 reviewers
 focus     = "all"                 # correctness | completeness | risk | clarity | all
 
+[plan_gate]                       # ExitPlanMode hook behavior
+enabled          = true
+max_rounds       = 2              # denials before the plan passes through
+reason_max_chars = 3000           # budget for findings fed back to Claude
+# reviewers      = ["codex"]      # gate-specific override of defaults.reviewers
+
+[reviewers.codex]
+effort          = "high"          # passed as -c model_reasoning_effort=high (any string codex accepts)
+timeout_seconds = 300             # per-reviewer override of limits.timeout_seconds
+# model         = "gpt-5.6-sol"   # passed as -m; omit to inherit ~/.codex/config.toml
+
 [reviewers.gemini]
 type   = "cli"
 binary = "gemini"
@@ -161,10 +205,10 @@ model    = "qwen2.5:0.5b"
 [limits]
 plan_max_chars   = 16000
 report_max_chars = 8000
-timeout_seconds  = 60
+timeout_seconds  = 300
 ```
 
-Without a config file, `reviewers = ["claude"]` is used. The `defaults.reviewers` list controls which backends are required to be healthy — `inspectrum doctor` only fails on those.
+Without a config file, `reviewers = ["codex"]` is used. Built-in reviewer entries (claude/codex/gemini) survive user `[reviewers.*]` additions — a same-id entry replaces the built-in one. The `defaults.reviewers` list controls which backends are required to be healthy — `inspectrum doctor` only fails on those.
 
 Free-tier-friendly: `gemini auth` lets you use the Gemini CLI with a personal Google account, no API key.
 
@@ -224,7 +268,7 @@ npx -y inspectrum@latest doctor
 - Session logs live at `~/.inspectrum/sessions/<timestamp>__<id>/` and contain your full plan + each reviewer's transcript. v0.1.0 sets the directory permissions to **0700 on POSIX** so other users on the same machine can't read them. Sessions written by older versions stay on their original perms — retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
 - **Never paste secrets into the plan or context.** They get written to disk and sent to every active reviewer.
 - Cloud routes (what gets sent where): **claude** → Anthropic via Claude Code OAuth keychain or `ANTHROPIC_API_KEY`; **codex** → OpenAI via ChatGPT login or `OPENAI_API_KEY`; **gemini** → Google via `gemini auth` or `GEMINI_API_KEY`; **kimi** → Moonshot via `MOONSHOT_API_KEY` *(experimental)*; **qwen** → Alibaba DashScope via `DASHSCOPE_API_KEY` *(experimental)*; **openrouter** → openrouter.ai → upstream provider chosen by `model`, via `OPENROUTER_API_KEY`; **ollama** → localhost only, with no network egress unless you reconfigure `endpoint`.
-- **Codex flags inspectrum passes.** `codex exec --skip-git-repo-check --ephemeral …`. `--skip-git-repo-check` bypasses codex 0.131's per-project trust prompt so plan review works from any cwd without first adding the directory to `~/.codex/config.toml`. `--ephemeral` keeps codex from persisting session files — it does *not* control the sandbox. inspectrum does **not** pass `--dangerously-bypass-approvals-and-sandbox`; whatever sandbox/approval defaults you have in `~/.codex/config.toml` still apply.
+- **Codex flags inspectrum passes.** `codex exec --ephemeral --skip-git-repo-check -s read-only …` plus `-m <model>` / `-c model_reasoning_effort=<effort>` when configured. `--skip-git-repo-check` bypasses the per-project trust prompt so plan review works from any cwd. `--ephemeral` keeps codex from persisting session files. `-s read-only` pins the sandbox explicitly — review must never write; user-supplied `-s`/`--sandbox` args are stripped.
 
 </details>
 

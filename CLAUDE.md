@@ -6,6 +6,6 @@
 
 - Use the `Plan` subagent for any change touching > 3 files before editing.
 - Use the `Explore` subagent for cross-file searches that span > 3 directories.
-- After edits to `src/tool/**`, `src/reviewers/**`, `src/judge/**`, or `src/config.ts`, run `npm run test:coverage` — `vitest.config.ts` gates those paths at ≥ 90 % lines / 90 % functions / 85 % branches.
+- After edits to `src/tool/**`, `src/reviewers/**`, `src/judge/**`, `src/hook/**`, `src/server/**`, `src/session/**`, `src/config.ts`, or `src/doctor.ts`, run `npm run test:coverage` — `vitest.config.ts` gates those paths at ≥ 90 % lines / functions / branches.
 - Pre-commit (lefthook) runs typecheck + lint + tests-with-coverage. Do not bypass with `--no-verify`.
 - Never edit `_decisions/*` without explicit user request.

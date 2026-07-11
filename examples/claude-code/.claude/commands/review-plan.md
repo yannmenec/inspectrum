@@ -23,6 +23,10 @@ Also recognize the natural-language trigger when the user types something
 like *"review this plan with inspectrum"* (with or without a reviewer
 list). Treat that as the same invocation as the slash command.
 
+Prefer the inspectrum plugin for automatic plan-mode review (hook +
+`/inspectrum:review`):
+`claude plugin marketplace add yannmenec/inspectrum && claude plugin install inspectrum@inspectrum`
+
 ---
 
 ### Auto-run snippet (optional)
