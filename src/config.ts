@@ -29,5 +29,10 @@ export function loadConfig(configPath?: string): Config {
     throw new Error(`Unsupported config version ${version}. Supported: ${SUPPORTED_VERSIONS.join(", ")}`);
   }
 
-  return ConfigSchema.parse(parsed);
+  const config = ConfigSchema.parse(parsed);
+  // A [reviewers] table in TOML replaces the whole default record (Zod defaults
+  // only apply when the key is absent). Merge built-ins back under user entries
+  // so declaring one custom reviewer doesn't silently drop claude/codex/gemini.
+  // A user entry with the same id still fully replaces the built-in one.
+  return { ...config, reviewers: { ...defaultConfig.reviewers, ...config.reviewers } };
 }

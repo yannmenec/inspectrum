@@ -57,3 +57,56 @@ timeout_seconds = 10
     expect(() => loadConfig()).toThrow(/version/i);
   });
 });
+
+describe("loadConfig — v0.2 defaults and reviewer merge", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("defaults to codex as the sole reviewer with a 300s timeout", () => {
+    mockFs.existsSync.mockReturnValue(false);
+    const config = loadConfig();
+    expect(config.defaults.reviewers).toEqual(["codex"]);
+    expect(config.limits.timeout_seconds).toBe(300);
+    expect(config.reviewers["codex"]!.args).toEqual(["exec", "--ephemeral"]);
+  });
+
+  it("keeps built-in reviewers when the TOML declares a custom one", () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue(`
+[reviewers.local]
+type = "http"
+backend = "ollama"
+`);
+    const config = loadConfig();
+    expect(Object.keys(config.reviewers).sort()).toEqual(["claude", "codex", "gemini", "local"]);
+  });
+
+  it("lets a same-id user entry fully replace the built-in entry", () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue(`
+[reviewers.codex]
+model = "gpt-5.6-sol"
+effort = "high"
+timeout_seconds = 120
+`);
+    const config = loadConfig();
+    expect(config.reviewers["codex"]).toEqual({
+      type: "cli",
+      model: "gpt-5.6-sol",
+      effort: "high",
+      timeout_seconds: 120,
+    });
+  });
+
+  it("defaults reviewer type to cli so effort-only entries parse", () => {
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue(`
+[reviewers.codex]
+effort = "ultra"
+`);
+    const config = loadConfig();
+    expect(config.reviewers["codex"]!.type).toBe("cli");
+    expect(config.reviewers["codex"]!.effort).toBe("ultra");
+  });
+});

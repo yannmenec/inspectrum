@@ -1,9 +1,57 @@
 import * as fs from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import TOML from "@iarna/toml";
 import { checkReviewer } from "./reviewers/health.js";
+import { resolveReviewerBackend } from "./reviewers/common.js";
 import { loadConfig, getConfigPath, defaultConfig } from "./config.js";
 import type { Config } from "./config.js";
+import type { ReviewerConfig } from "./schemas.js";
+
+interface ResolvedSetting {
+  value: string;
+  source: string;
+}
+
+export interface CodexRuntime {
+  model: ResolvedSetting;
+  effort: ResolvedSetting;
+}
+
+/**
+ * Resolves which model/reasoning-effort a codex review will actually use:
+ * inspectrum's reviewer config wins; otherwise the user's ~/.codex/config.toml
+ * governs (inspectrum passes no flag); otherwise codex's built-in default.
+ */
+export function resolveCodexRuntime(reviewerConfig: ReviewerConfig, codexHome?: string): CodexRuntime {
+  let codexToml: Record<string, unknown> = {};
+  try {
+    const raw = fs.readFileSync(join(codexHome ?? join(homedir(), ".codex"), "config.toml"), "utf8");
+    codexToml = TOML.parse(raw);
+  } catch {
+    // Missing or unparseable codex config — fall through to codex defaults.
+  }
+
+  const resolve = (inspectrumValue: string | undefined, codexKey: string): ResolvedSetting => {
+    if (inspectrumValue) return { value: inspectrumValue, source: "~/.inspectrum/config.toml" };
+    const codexValue = codexToml[codexKey];
+    if (typeof codexValue === "string" && codexValue) return { value: codexValue, source: "~/.codex/config.toml" };
+    return { value: "unset", source: "codex default" };
+  };
+
+  return {
+    model: resolve(reviewerConfig.model, "model"),
+    effort: resolve(reviewerConfig.effort, "model_reasoning_effort"),
+  };
+}
+
+function isCodexCli(id: string, reviewerConfig: ReviewerConfig): boolean {
+  try {
+    return reviewerConfig.type === "cli" && resolveReviewerBackend(id, reviewerConfig) === "codex";
+  } catch {
+    return false;
+  }
+}
 
 export async function runDoctor(configPath?: string): Promise<boolean> {
   const useColor = process.stdout.isTTY === true && !process.env["NO_COLOR"];
@@ -92,6 +140,11 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
         failMsg(`${id}${result.reason ? ` — ${result.reason}` : ""}`);
         if (result.fix) hint(`Fix: ${result.fix}`);
         allOk = false;
+      }
+      if (isCodexCli(id, reviewerConfig)) {
+        const runtime = resolveCodexRuntime(reviewerConfig);
+        hint(`model:  ${runtime.model.value} (${runtime.model.source})`);
+        hint(`effort: ${runtime.effort.value} (${runtime.effort.source})`);
       }
     }
 

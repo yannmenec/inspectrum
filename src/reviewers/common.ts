@@ -321,7 +321,7 @@ const CODEX_RESERVED: ReservedFlags = {
   // `exec` is the codex subcommand we always inject; if a user re-passes it,
   // drop the duplicate. `--ephemeral` is a bool flag.
   bool: ["exec", "--ephemeral", "--skip-git-repo-check"],
-  paired: ["-m", "--model", "--output-schema", "--output-last-message"],
+  paired: ["-m", "--model", "-s", "--sandbox", "--output-schema", "--output-last-message"],
 };
 
 async function runCodexJsonReview(opts: {
@@ -345,7 +345,12 @@ async function runCodexJsonReview(opts: {
       "exec",
       "--ephemeral",
       "--skip-git-repo-check",
+      "-s",
+      "read-only",
       ...(model ? ["-m", model] : []),
+      // Bare value on purpose: codex -c parses values as TOML and falls back to
+      // a raw string when that fails; quoting here would embed literal quotes.
+      ...(opts.config.effort ? ["-c", `model_reasoning_effort=${opts.config.effort}`] : []),
       "--output-schema",
       schemaFile,
       "--output-last-message",

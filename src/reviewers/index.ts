@@ -1,4 +1,4 @@
-import type { RawReview, ReviewerConfig } from "../schemas.js";
+import type { Config, RawReview, ReviewerConfig } from "../schemas.js";
 import { ClaudeReviewer } from "./claude.js";
 import { CodexReviewer } from "./codex.js";
 import { GeminiReviewer } from "./gemini.js";
@@ -13,15 +13,16 @@ export interface Reviewer {
   review(plan: string, focus: string, context?: string): Promise<RawReview>;
 }
 
-export function createReviewer(id: string, config: ReviewerConfig): Reviewer {
+export function createReviewer(id: string, config: ReviewerConfig, limits?: Config["limits"]): Reviewer {
   const backend = resolveReviewerBackend(id, config);
-  if (backend === "claude") return new ClaudeReviewer(id, config);
-  if (backend === "codex") return new CodexReviewer(id, config);
-  if (backend === "ollama") return new OllamaReviewer(id, config);
-  if (backend === "openrouter") return new OpenRouterReviewer(id, config);
-  if (backend === "kimi") return new KimiReviewer(id, config);
-  if (backend === "qwen") return new QwenReviewer(id, config);
-  return new GeminiReviewer(id, config);
+  const timeoutMs = (config.timeout_seconds ?? limits?.timeout_seconds ?? 300) * 1000;
+  if (backend === "claude") return new ClaudeReviewer(id, config, timeoutMs);
+  if (backend === "codex") return new CodexReviewer(id, config, timeoutMs);
+  if (backend === "ollama") return new OllamaReviewer(id, config, timeoutMs);
+  if (backend === "openrouter") return new OpenRouterReviewer(id, config, timeoutMs);
+  if (backend === "kimi") return new KimiReviewer(id, config, timeoutMs);
+  if (backend === "qwen") return new QwenReviewer(id, config, timeoutMs);
+  return new GeminiReviewer(id, config, timeoutMs);
 }
 
 export { ClaudeReviewer, CodexReviewer, GeminiReviewer, OllamaReviewer, OpenRouterReviewer, KimiReviewer, QwenReviewer };

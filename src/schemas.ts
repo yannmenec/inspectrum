@@ -73,37 +73,41 @@ export const ClaudeEnvelopeSchema = z.object({
 });
 
 export const ReviewerConfigSchema = z.object({
-  type: z.enum(["cli", "http"]),
+  type: z.enum(["cli", "http"]).default("cli"),
   backend: z.enum(["claude", "codex", "gemini", "ollama", "openrouter", "kimi", "qwen"]).optional(),
   binary: z.string().optional(),
   args: z.array(z.string()).optional(),
   endpoint: z.string().optional(),
   model: z.string().optional(),
+  // Reasoning effort, passed through verbatim (codex: -c model_reasoning_effort=<v>).
+  // Deliberately not an enum: CLIs add levels (e.g. "ultra") faster than we release.
+  effort: z.string().optional(),
+  timeout_seconds: z.number().int().positive().optional(),
 });
 
 export const ConfigSchema = z.object({
   version: z.number().int().default(1),
   defaults: z
     .object({
-      reviewers: z.array(z.string()).default(["claude"]),
+      reviewers: z.array(z.string()).default(["codex"]),
       judge: z.string().default("claude"),
       focus: z.enum(["correctness", "completeness", "risk", "clarity", "all"]).default("all"),
     })
-    .default({ reviewers: ["claude"], judge: "claude", focus: "all" }),
+    .default({ reviewers: ["codex"], judge: "claude", focus: "all" }),
   reviewers: z
     .record(z.string(), ReviewerConfigSchema)
     .default({
       claude: { type: "cli", binary: "claude", args: ["-p", "--output-format", "json", "--no-session-persistence"] },
-      codex: { type: "cli", binary: "codex", args: ["exec", "--ephemeral", "--json"] },
+      codex: { type: "cli", binary: "codex", args: ["exec", "--ephemeral"] },
       gemini: { type: "cli", binary: "gemini", args: ["--prompt", "-"] },
     }),
   limits: z
     .object({
       plan_max_chars: z.number().int().default(16000),
       report_max_chars: z.number().int().default(8000),
-      timeout_seconds: z.number().int().default(60),
+      timeout_seconds: z.number().int().default(300),
     })
-    .default({ plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 60 }),
+    .default({ plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 300 }),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

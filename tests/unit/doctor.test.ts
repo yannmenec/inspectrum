@@ -21,7 +21,7 @@ vi.mock("../../src/config.js", () => ({
   },
 }));
 
-import { runDoctor } from "../../src/doctor.js";
+import { runDoctor, resolveCodexRuntime } from "../../src/doctor.js";
 import { checkReviewer } from "../../src/reviewers/health.js";
 import { loadConfig, defaultConfig } from "../../src/config.js";
 
@@ -356,5 +356,79 @@ describe("runDoctor", () => {
         process.env["NO_COLOR"] = prevNoColor;
       }
     }
+  });
+});
+
+describe("resolveCodexRuntime", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("prefers inspectrum reviewer config over the codex config file", () => {
+    mockFs.readFileSync.mockReturnValue('model = "gpt-other"\nmodel_reasoning_effort = "low"\n' as never);
+    const runtime = resolveCodexRuntime({ type: "cli", model: "gpt-5.6-sol", effort: "high" });
+    expect(runtime.model).toEqual({ value: "gpt-5.6-sol", source: "~/.inspectrum/config.toml" });
+    expect(runtime.effort).toEqual({ value: "high", source: "~/.inspectrum/config.toml" });
+  });
+
+  it("falls back to ~/.codex/config.toml when inspectrum leaves model/effort unset", () => {
+    mockFs.readFileSync.mockReturnValue('model = "gpt-5.6-sol"\nmodel_reasoning_effort = "ultra"\n' as never);
+    const runtime = resolveCodexRuntime({ type: "cli" });
+    expect(runtime.model).toEqual({ value: "gpt-5.6-sol", source: "~/.codex/config.toml" });
+    expect(runtime.effort).toEqual({ value: "ultra", source: "~/.codex/config.toml" });
+  });
+
+  it("reports codex defaults when neither config sets anything", () => {
+    mockFs.readFileSync.mockImplementation(() => { throw new Error("ENOENT"); });
+    const runtime = resolveCodexRuntime({ type: "cli" });
+    expect(runtime.model).toEqual({ value: "unset", source: "codex default" });
+    expect(runtime.effort).toEqual({ value: "unset", source: "codex default" });
+  });
+
+  it("survives an unparseable codex config file", () => {
+    mockFs.readFileSync.mockReturnValue("not = = valid toml" as never);
+    const runtime = resolveCodexRuntime({ type: "cli", effort: "medium" });
+    expect(runtime.model).toEqual({ value: "unset", source: "codex default" });
+    expect(runtime.effort).toEqual({ value: "medium", source: "~/.inspectrum/config.toml" });
+  });
+});
+
+describe("runDoctor codex runtime display", () => {
+  let output: string;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    output = "";
+    vi.spyOn(process.stdout, "write").mockImplementation((s) => {
+      output += String(s);
+      return true;
+    });
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.mkdirSync.mockReturnValue(undefined);
+    mockFs.accessSync.mockReturnValue(undefined);
+    mockFs.readFileSync.mockImplementation(() => { throw new Error("ENOENT"); });
+    mockCheckReviewer.mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prints resolved model/effort for an active codex reviewer", async () => {
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      reviewers: { codex: { type: "cli" as const, binary: "codex", model: "gpt-5.6-sol", effort: "high" } },
+      defaults: { reviewers: ["codex"], judge: "claude", focus: "all" as const },
+    });
+    const result = await runDoctor();
+    expect(result).toBe(true);
+    expect(output).toContain("model:  gpt-5.6-sol (~/.inspectrum/config.toml)");
+    expect(output).toContain("effort: high (~/.inspectrum/config.toml)");
+  });
+
+  it("prints no codex runtime lines for non-codex reviewers", async () => {
+    mockLoadConfig.mockReturnValue(HEALTHY_CONFIG);
+    await runDoctor();
+    expect(output).not.toContain("effort:");
   });
 });

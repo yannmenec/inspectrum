@@ -276,3 +276,17 @@ describe("checkReviewer — HTTP", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("install fix hints", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("points codex installs at the npm package, not a download URL", async () => {
+    const err = new Error("spawnSync codex ENOENT");
+    mockExecFileSync.mockImplementation(() => { throw err; });
+    const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+    expect(result.ok).toBe(false);
+    expect(result.fix).toBe("Install Codex CLI: npm install -g @openai/codex");
+  });
+});

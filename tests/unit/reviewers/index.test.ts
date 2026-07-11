@@ -98,6 +98,32 @@ describe("createReviewer", () => {
   });
 });
 
+describe("createReviewer timeout wiring", () => {
+  // timeoutMs is a TS-private constructor field; runtime access is fine in tests.
+  const timeoutOf = (r: unknown): number => (r as { timeoutMs: number }).timeoutMs;
+  const limits = { plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 300 };
+
+  it("prefers the reviewer's own timeout_seconds over limits", () => {
+    const reviewer = createReviewer("codex", { type: "cli", timeout_seconds: 120 }, limits);
+    expect(timeoutOf(reviewer)).toBe(120_000);
+  });
+
+  it("falls back to limits.timeout_seconds when the reviewer has none", () => {
+    const reviewer = createReviewer("codex", { type: "cli" }, { ...limits, timeout_seconds: 90 });
+    expect(timeoutOf(reviewer)).toBe(90_000);
+  });
+
+  it("defaults to 300s when neither reviewer nor limits provide a timeout", () => {
+    const reviewer = createReviewer("codex", { type: "cli" });
+    expect(timeoutOf(reviewer)).toBe(300_000);
+  });
+
+  it("wires the timeout into http reviewers too", () => {
+    const reviewer = createReviewer("local", { type: "http", backend: "ollama", timeout_seconds: 45 }, limits);
+    expect(timeoutOf(reviewer)).toBe(45_000);
+  });
+});
+
 describe("runBackendJsonReview defensive guard", () => {
   it("throws when called with ollama backend (must use runHttpBackendJsonReview)", async () => {
     await expect(
