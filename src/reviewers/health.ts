@@ -66,7 +66,15 @@ function checkCli(id: string, binary: string): HealthResult {
   // an interactive OAuth login — Desktop MCP hosts often don't propagate API keys.
   const envs = CLI_REVIEWER_ENV[id];
   if (envs && !envs.some((k) => !!process.env[k])) {
-    if (hasOauthLogin(id, binary)) return { ok: true };
+    const oauthStatus = getOauthStatus(id, binary);
+    if (oauthStatus === "logged-in") return { ok: true };
+    if (id === "codex" && oauthStatus === "logged-out") {
+      return {
+        ok: false,
+        reason: "codex is not logged in",
+        fix: "Run `codex` and complete the ChatGPT sign-in, or set OPENAI_API_KEY",
+      };
+    }
     const envList = envs.length === 1 ? envs[0] : envs.join(" or ");
     return {
       ok: true,
@@ -76,9 +84,11 @@ function checkCli(id: string, binary: string): HealthResult {
   return { ok: true };
 }
 
+type OauthStatus = "logged-in" | "logged-out" | "unknown";
+
 // Detect when a CLI is authenticated via its own OAuth flow (no env var set). Only
 // implemented per-backend where the CLI exposes a quick non-interactive probe.
-function hasOauthLogin(id: string, binary: string): boolean {
+function getOauthStatus(id: string, binary: string): OauthStatus {
   if (id === "codex") {
     try {
       // codex ≤0.131 printed the status to stdout; 0.144+ prints to stderr.
@@ -88,15 +98,18 @@ function hasOauthLogin(id: string, binary: string): boolean {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       });
-      return out.status === 0 && /logged in/i.test(`${out.stdout ?? ""}${out.stderr ?? ""}`);
+      if (out.status !== 0) return "unknown";
+      const output = `${out.stdout ?? ""}${out.stderr ?? ""}`;
+      if (/not logged in/i.test(output)) return "logged-out";
+      return /logged in/i.test(output) ? "logged-in" : "logged-out";
     } catch {
-      return false;
+      return "unknown";
     }
   }
   // claude has no equivalent `claude login status` CLI subcommand (state lives in the
   // macOS keychain). gemini auth state likewise requires a heavier probe. Skip both
   // here — the warning copy already covers OAuth-logged-in users.
-  return false;
+  return "unknown";
 }
 
 async function checkHttp(endpoint: string): Promise<HealthResult> {
