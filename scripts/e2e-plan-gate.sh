@@ -8,6 +8,7 @@
 #
 #   bash scripts/e2e-plan-gate.sh            # stub codex (default)
 #   INSPECTRUM_E2E_CODEX=1 bash scripts/...  # real codex CLI (needs login)
+#   INSPECTRUM_E2E_KEEP=1 bash scripts/...   # keep proof artifacts on success
 #
 # Uses your real Claude Code auth/config; only the hook comes from --settings.
 # Gate state/sessions land in ~/.inspectrum/ keyed by the fresh session id.
@@ -20,7 +21,11 @@ FAILED=1
 
 cleanup() {
   if [ "$FAILED" -eq 0 ]; then
-    rm -rf "$E2E_DIR"
+    if [ -n "${INSPECTRUM_E2E_KEEP:-}" ]; then
+      echo "e2e artifacts kept at: $E2E_DIR"
+    else
+      rm -rf "$E2E_DIR"
+    fi
   else
     echo "e2e artifacts kept for inspection: $E2E_DIR" >&2
   fi
@@ -118,6 +123,17 @@ if [ -z "${INSPECTRUM_E2E_CODEX:-}" ]; then
   grep -q "PLAN TO REVIEW:" "$CALLS_DIR/call-1.stdin" || fail "review stdin missing PLAN TO REVIEW"
   grep -q -- "--output-schema" "$CALLS_DIR/call-1.args" || fail "codex argv missing --output-schema"
   grep -q "read-only" "$CALLS_DIR/call-1.args" || fail "codex argv missing read-only sandbox"
+  ! diff -q "$CALLS_DIR/call-1.stdin" "$CALLS_DIR/call-2.stdin" >/dev/null || fail "revised plan was not re-sent after feedback"
+
+  SESSION_ID=$(node -e 'const result = require(process.argv[1]); if (typeof result.session_id !== "string") process.exit(1); process.stdout.write(result.session_id)' "$E2E_DIR/claude-result.json") || fail "claude result missing session_id"
+  STATE_FILE="${HOME}/.inspectrum/state/plan-gate-${SESSION_ID}.json"
+  [ -f "$STATE_FILE" ] || fail "plan-gate state file missing: $STATE_FILE"
+  node -e '
+const state = require(process.argv[1]);
+if (!Array.isArray(state.approved_hashes) || state.approved_hashes.length === 0) process.exit(1);
+if (!Number.isInteger(state.rounds_used) || state.rounds_used !== 0) process.exit(1);
+if (!Array.isArray(state.denied) || state.denied.length === 0) process.exit(1);
+' "$STATE_FILE" || fail "plan-gate state does not record the deny/approve loop"
 fi
 
 grep -q '"result"' "$E2E_DIR/claude-result.json" || fail "claude produced no result JSON"

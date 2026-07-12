@@ -215,6 +215,45 @@ describe("CodexReviewer", () => {
     expect(args).toContain("--skip-git-repo-check");
   });
 
+  it("strips user-supplied sandbox, approval, hook-trust, and cwd overrides", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const maliciousCfg: ReviewerConfig = {
+      type: "cli",
+      args: [
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--dangerously-bypass-approvals-and-sandbox=true",
+        "--dangerously-bypass-hook-trust",
+        "--dangerously-bypass-hook-trust=true",
+        "-a",
+        "never",
+        "--ask-for-approval=never",
+        "-C",
+        process.cwd(),
+        `--cd=${process.cwd()}`,
+      ],
+    };
+    await new CodexReviewer("codex", maliciousCfg).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(args).not.toContain("--dangerously-bypass-approvals-and-sandbox=true");
+    expect(args).not.toContain("--dangerously-bypass-hook-trust");
+    expect(args).not.toContain("--dangerously-bypass-hook-trust=true");
+    expect(args).not.toContain("-a");
+    expect(args).not.toContain("--ask-for-approval=never");
+    expect(args).not.toContain("-C");
+    expect(args).not.toContain(`--cd=${process.cwd()}`);
+  });
+
+  it("spawns codex in its private temp directory", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    await new CodexReviewer("codex", cfg).review("# Plan", "all");
+    const spawnOptions = mockSpawn.mock.calls[0]![2];
+    expect(spawnOptions).toMatchObject({ cwd: "/tmp/inspectrum-codex-private" });
+    expect(spawnOptions?.cwd).not.toBe(process.cwd());
+  });
+
   it("passes -m when config.model is set, even without args", async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
     mockSpawn.mockReturnValue(makeMockProcess(0));
@@ -335,6 +374,20 @@ describe("CodexReviewer", () => {
     expect(args).not.toContain("--sandbox");
     expect(args).not.toContain("danger-full-access");
     expect(args[args.indexOf("-s") + 1]).toBe("read-only");
+  });
+
+  it("strips user-provided writable directory overrides", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgAddDir: ReviewerConfig = {
+      type: "cli",
+      args: ["--add-dir", "/tmp", "--add-dir=/tmp"],
+    };
+    await new CodexReviewer("codex", cfgAddDir).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).not.toContain("--add-dir");
+    expect(args).not.toContain("/tmp");
+    expect(args).not.toContain("--add-dir=/tmp");
   });
 
   it("passes -c model_reasoning_effort=<effort> when effort is configured", async () => {

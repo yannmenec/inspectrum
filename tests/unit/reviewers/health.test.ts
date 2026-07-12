@@ -106,9 +106,17 @@ describe("checkReviewer — CLI", () => {
       expect(result).toEqual({ ok: true });
     });
 
-    it("warns when codex binary found but OPENAI_API_KEY unset and `codex login status` fails", async () => {
+    it("warns when codex binary found but `codex login status` exits unsuccessfully", async () => {
       mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
       mockSpawnSync.mockReturnValue(spawnSyncResult(1, "", "Not logged in"));
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result.ok).toBe(true);
+      expect(result.warning).toMatch(/OPENAI_API_KEY/);
+    });
+
+    it("warns when the codex login probe errors", async () => {
+      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockSpawnSync.mockImplementation(() => { throw new Error("ETIMEDOUT"); });
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
       expect(result.ok).toBe(true);
       expect(result.warning).toMatch(/OPENAI_API_KEY/);
@@ -128,11 +136,15 @@ describe("checkReviewer — CLI", () => {
       expect(result).toEqual({ ok: true });
     });
 
-    it("treats a zero-status login probe without the magic words as logged out", async () => {
+    it("fails when a zero-status codex login probe definitively reports logged out", async () => {
       mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
-      mockSpawnSync.mockReturnValue(spawnSyncResult(0, "", ""));
+      mockSpawnSync.mockReturnValue(spawnSyncResult(0, "Not logged in", ""));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
-      expect(result.warning).toMatch(/OPENAI_API_KEY/);
+      expect(result).toEqual({
+        ok: false,
+        reason: "codex is not logged in",
+        fix: "Run `codex` and complete the ChatGPT sign-in, or set OPENAI_API_KEY",
+      });
     });
 
     it("warns when gemini binary found and none of GEMINI_API_KEY/GOOGLE_API_KEY/GOOGLE_GENAI_USE_VERTEXAI is set", async () => {

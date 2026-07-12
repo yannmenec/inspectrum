@@ -57,7 +57,8 @@ npm view inspectrum name version --json    # confirm the name is still available
 
 ```bash
 git checkout main && git pull --ff-only
-git tag -a v0.1.0 -m "v0.1.0 — first public release"
+VERSION=$(node -p "require('./package.json').version")
+git tag -a "v$VERSION" -m "v$VERSION"
 git push origin main --tags
 npm publish --access public
 ```
@@ -65,7 +66,8 @@ npm publish --access public
 ### Post-publish smoke (60 s)
 
 ```bash
-cd $(mktemp -d) && npx -y inspectrum@0.1.0 doctor
+VERSION=$(node -p "require('./package.json').version")
+cd $(mktemp -d) && npx -y inspectrum@"$VERSION" doctor
 ```
 
 Expect 4 sections (Runtime / Config / Sessions / Reviewers) and a non-zero

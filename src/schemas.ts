@@ -113,7 +113,7 @@ export const ConfigSchema = z.object({
       enabled: z.boolean().default(true),
       max_rounds: z.number().int().positive().default(2),
       reviewers: z.array(z.string()).optional(),
-      reason_max_chars: z.number().int().positive().default(3000),
+      reason_max_chars: z.number().int().min(500).default(3000),
     })
     .default({ enabled: true, max_rounds: 2, reason_max_chars: 3000 }),
 });
