@@ -1,42 +1,56 @@
+<div align="center">
+
 # inspectrum
 
-> Catch the bad plan before your agent spends the tokens.
+### Catch the bad plan before your agent spends the tokens.
 
 [![CI](https://github.com/yannmenec/inspectrum/actions/workflows/ci.yml/badge.svg)](https://github.com/yannmenec/inspectrum/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/inspectrum.svg)](https://www.npmjs.com/package/inspectrum)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node >= 20](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org/)
 
-Plan Mode changed AI coding because it moved the important decision earlier: before files are edited, tests are rewritten, or a PR exists. But one model reviewing its own plan misses the same blind spots.
+**Claude plans it. GPT reviews it. You approve it.**
 
-inspectrum sends the plan to a peer LLM, merges the findings, and returns one verdict: **approve / revise / reject**.
+</div>
 
-## Why plans need review
+---
 
-- **Plans are leverage.** Fixing a bad plan is cheaper than fixing bad code.
-- **Single-model review is biased.** The same model often misses the same flaw twice.
-- **Cross-LLM review catches different risks.** Claude and Codex disagree usefully.
-- **You keep the final call.** Inspectrum is read-only: it reviews, logs, and reports.
+Every AI coding disaster starts the same way: a plausible plan, approved in three seconds.
 
-## Setup
+The problem isn't that your agent plans badly — it's that **nobody checks the plan**. You skim it, hit approve, and find out 40 minutes and 200k tokens later that step 2 was wrong. Asking the same model to review its own plan doesn't help: same model, same blind spots, same miss — twice.
 
-You need **Node.js 20+** ([nodejs.org](https://nodejs.org/)) and one of the two main coding agents:
+**inspectrum wires a rival LLM into your agent's plan mode.** When Claude Code finishes a plan, Codex (GPT) reviews it *before* the approval dialog reaches you. Findings bounce the plan back to Claude for revision — so the plan you finally approve has already survived a second opinion. (And if the reviewer can't run, the plan passes through with a warning, never blocked.)
 
-- **Claude Code** users → use **Codex** as your reviewer. Needs a [ChatGPT Plus/Pro/Business subscription](https://chatgpt.com/pricing) (no API key).
-- **Codex Desktop** users → use **Claude** as your reviewer. Needs a [Claude Pro/Max subscription](https://www.anthropic.com/pricing) (no API key).
+## ⚡ 60 seconds to your first gated plan
 
-No JSON editing, no API keys. Paste one prompt; you're done.
-
-### If you use Claude Code
-
-**The plan gate (recommended).** Two commands install a plugin that reviews every plan with Codex *before* the approval dialog appears — Codex findings bounce the plan back to Claude for revision (max 2 rounds), and only reviewed plans reach you:
+You need [Node 20+](https://nodejs.org), Claude Code, and the Codex CLI with a [ChatGPT subscription](https://chatgpt.com/pricing) (no API key):
 
 ```bash
 claude plugin marketplace add yannmenec/inspectrum
 claude plugin install inspectrum@inspectrum
 ```
 
-You also need the Codex CLI (`npm install -g @openai/codex`, then run `codex` once to sign in with your ChatGPT account) — paste this into a Claude Code chat if you'd rather have the agent check everything:
+That's the whole install. Next time you finish a plan in plan mode:
+
+```text
+⏺ ExitPlanMode
+  ⎿  inspectrum×codex: REVISE (round 1/2)          # abridged — real output
+     Majors:                                       # adds a full-report path
+     - [codex] Migration drops the unique index before backfilling —
+       concurrent writes can insert duplicates.
+       Fix: backfill first, drop the index last.
+     Revise the plan to address these findings, then finish the plan again.
+
+⏺ ExitPlanMode
+  ⎿  inspectrum: codex approved the plan (session 2026-07-12…).
+     ┌ Ready to code? ────────────────
+     │ Here is Claude's plan…        ← your normal approval dialog
+```
+
+No prompt to remember, no button, zero tokens spent on triggering. The gate is a deterministic hook — it fires on every plan, whether your session runs Fable, Sonnet, or Haiku. Two commands give you the automatic gate; the on-demand `/inspectrum:review` command needs one extra line (registering the MCP server — shown in the assisted setup below).
+
+<details>
+<summary>Prefer the agent to install and check everything for you? Paste this into Claude Code.</summary>
 
 ````text
 Set up inspectrum's Codex plan gate. Use normal approvals only — do not
@@ -69,35 +83,65 @@ credentials, or publish packages. Report back: Node version, codex
 install status, doctor verdict, and whether login was needed.
 ````
 
-**How the gate behaves.** When Claude finishes a plan in plan mode, the hook runs `inspectrum plan-gate`: verdict `approve` → your normal approval dialog appears (plus a one-line confirmation); `revise`/`reject` → Claude receives the findings and revises before you ever see the plan (max 2 rounds, then it passes through with a warning). Identical plans are never reviewed twice (hash cache), and *any* failure — Codex not installed, logged out, timeout — fails open: your plan proceeds, with a visible warning. Kill switch: `[plan_gate] enabled = false` in `~/.inspectrum/config.toml`, or disable the plugin per project.
-
-<details>
-<summary>Manual hook install (no plugin)</summary>
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          { "type": "command", "command": "npx -y inspectrum@latest plan-gate", "timeout": 600 }
-        ]
-      }
-    ]
-  }
-}
-```
-
-If you hack on inspectrum itself, prefer `npm install -g inspectrum` and `"command": "inspectrum plan-gate"` — see Troubleshooting.
-
 </details>
 
-### If you use Codex Desktop
+## How it works
 
-Paste this into Codex Desktop. It installs the Claude Code CLI as your peer reviewer.
+```
+you ──▶ Claude Code ──▶ plan ready ──▶ ExitPlanMode
+                                          │
+                              inspectrum plan-gate (hook)
+                                          │
+                              Codex reviews the plan
+                              (read-only sandbox, your ChatGPT sub)
+                                          │
+                    ┌─────────────────────┴──────────────────────┐
+              APPROVE ✅                                REVISE / REJECT ❌
+                    │                                             │
+        your approval dialog                    findings go back to Claude,
+        appears as usual                        it revises, gate runs again
+                                                       (max 2 rounds)
+```
+
+Built to be **boring and safe**:
+
+- **Fails open.** Codex not installed, logged out, timed out, network down — the plan proceeds with a visible warning. Operational errors don't block your work; the gate degrades, it doesn't brick.
+- **Never auto-approves.** A green review still lands on *your* approval dialog. The gate can delay it (while Claude revises) but can never click it — you keep the final call.
+- **No wasted reviews.** Within a session, an unchanged plan is hash-cached and not re-reviewed; only real revisions spend a round.
+- **Read-only reviewer.** Codex runs in a pinned read-only sandbox (`codex exec -s read-only --ephemeral`), and sandbox-weakening flags in your config are stripped. The reviewer reads; it doesn't write.
+- **Kill switch.** `[plan_gate] enabled = false` in `~/.inspectrum/config.toml`, or disable the plugin per project.
+
+## Why a rival model?
+
+- **Plans are leverage.** A flaw caught at plan time costs a paragraph. The same flaw caught at PR time costs a rewrite.
+- **Self-review is an echo chamber.** The model that wrote the plan is the least qualified to find its blind spots.
+- **Claude and GPT disagree usefully.** Different training, different failure modes, different objections. That disagreement is the product.
+- **You already pay for both.** The gate runs on your existing ChatGPT subscription — no API key, no per-token bill.
+
+## What's in the box
+
+| | |
+|---|---|
+| 🚦 **Plan gate** | Every Claude Code plan reviewed by Codex before it reaches you — automatic, max 2 revision rounds |
+| 🔍 **On-demand review** | `/inspectrum:review` or "Review this plan with inspectrum" from any MCP host |
+| 🧑‍⚖️ **Multi-reviewer + judge** | Run codex + gemini + claude in parallel; a judge consolidates into one verdict |
+| 📋 **One verdict** | `approve / revise / reject` + findings by severity, with reviewer attribution |
+| 🗂️ **Session logs** | Markdown record of every review — verdict, findings, revised plan — under `~/.inspectrum/sessions/` (0700 perms) |
+| 🩺 **`inspectrum doctor`** | One command to check your reviewer is installed, authenticated, and resolving the right model — fails loudly if Codex is logged out |
+
+## Works with
+
+| Your agent | Your reviewer | Setup |
+|------------|--------------|-------|
+| **Claude Code** | Codex (GPT) | Plugin — 2 commands above |
+| **Codex Desktop** | Claude | `codex mcp add inspectrum -- npx -y inspectrum@latest` + config below |
+| **Claude Desktop** | Codex (GPT) | Download [`inspectrum.mcpb`](https://github.com/yannmenec/inspectrum/releases/latest/download/inspectrum.mcpb), open, confirm |
+| **Cursor** | Codex (GPT) | [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.png)](https://cursor.com/en/install-mcp?name=inspectrum&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImluc3BlY3RydW1AbGF0ZXN0Il19) |
+
+<details>
+<summary><b>Codex Desktop setup</b> — use Claude as your reviewer</summary>
+
+Paste this into Codex Desktop:
 
 ````text
 Set up inspectrum so I can review my plans with Claude. Use normal
@@ -132,47 +176,23 @@ credentials, or publish packages. Report back: Node version, claude
 install status, doctor verdict, and whether login was needed.
 ````
 
-After the one-time login (if needed), you're set.
+Needs a [Claude Pro/Max subscription](https://www.anthropic.com/pricing) — no API key.
 
-## Use
+</details>
 
-With the plugin installed, **plan mode is the workflow** — every plan is reviewed automatically before you see it. No prompt, no button, no tokens spent on triggering.
+## Tuning
 
-On demand (any host with the MCP server registered), use `/inspectrum:review [reviewers]` or just ask:
-
-```text
-Review this plan with inspectrum.
-```
-
-**Which model reviews, at which effort?** Nobody "asks" for the review — the hook is deterministic code, so it works the same whether your session runs Fable 5, Sonnet or Haiku. On the Codex side, precedence is:
+**Which model reviews, at which effort?** On the Codex side, precedence is:
 
 | Setting | 1st (wins) | 2nd | 3rd |
 |---|---|---|---|
 | model | `[reviewers.codex] model` in `~/.inspectrum/config.toml` | `model` in `~/.codex/config.toml` | codex built-in default |
 | reasoning effort | `[reviewers.codex] effort` | `model_reasoning_effort` in `~/.codex/config.toml` | codex built-in default |
 
-`inspectrum doctor` prints the resolved values. High/ultra effort gives the deepest reviews but can take minutes per plan — set `effort = "high"` (or `"medium"`) in `[reviewers.codex]` if the gate feels slow.
-
-## What you get
-
-inspectrum writes a Markdown report with a verdict (`approve`, `revise`, or `reject`), findings grouped by severity, reviewer attribution, an optional revised plan, and a local session log under `~/.inspectrum/sessions/` (chmod 0700 on POSIX).
+`inspectrum doctor` prints the resolved values. High effort gives the deepest reviews but can take minutes per plan — drop to `effort = "medium"` in `[reviewers.codex]` if the gate feels slow.
 
 <details>
-<summary>Advanced setup (other hosts, more reviewers, API keys)</summary>
-
-#### Other hosts
-
-| Host | Install |
-|------|---------|
-| **Claude Desktop** (macOS, Windows) | Download [`inspectrum.mcpb`](https://github.com/yannmenec/inspectrum/releases/latest/download/inspectrum.mcpb), open it, confirm install. |
-| **Cursor** | [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.png)](https://cursor.com/en/install-mcp?name=inspectrum&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImluc3BlY3RydW1AbGF0ZXN0Il19) |
-| **Codex app form fields** | Settings → MCP servers → Add server. STDIO. Name `inspectrum`, Command `npx`, Arguments `-y inspectrum@latest`. |
-
-Manual JSON/TOML examples live under [`examples/`](examples/). See the [Claude Code MCP docs](https://code.claude.com/docs/en/mcp), [Codex MCP docs](https://developers.openai.com/codex/mcp), and [Cursor install links](https://cursor.com/docs/mcp/install-links) for host docs.
-
-#### More reviewers
-
-Override `~/.inspectrum/config.toml` to add Gemini, local Ollama, OpenRouter, etc.:
+<summary><b>Full config</b> — more reviewers, judge, limits (~/.inspectrum/config.toml)</summary>
 
 ```toml
 [defaults]
@@ -187,7 +207,7 @@ reason_max_chars = 3000           # budget for findings fed back to Claude
 # reviewers      = ["codex"]      # gate-specific override of defaults.reviewers
 
 [reviewers.codex]
-effort          = "high"          # passed as -c model_reasoning_effort=high (any string codex accepts)
+effort          = "high"          # passed as -c model_reasoning_effort=high
 timeout_seconds = 300             # per-reviewer override of limits.timeout_seconds
 # model         = "gpt-5.6-sol"   # passed as -m; omit to inherit ~/.codex/config.toml
 
@@ -203,74 +223,55 @@ endpoint = "http://localhost:11434"
 model    = "qwen2.5:0.5b"
 
 [limits]
-plan_max_chars   = 16000
-report_max_chars = 8000
-timeout_seconds  = 300
+report_max_chars = 8000           # caps the stored report
+timeout_seconds  = 300            # default reviewer wallclock
 ```
 
-Without a config file, `reviewers = ["codex"]` is used. Built-in reviewer entries (claude/codex/gemini) survive user `[reviewers.*]` additions — a same-id entry replaces the built-in one. The `defaults.reviewers` list controls which backends are required to be healthy — `inspectrum doctor` only fails on those.
+Without a config file, `reviewers = ["codex"]` is used. Free-tier-friendly: the Gemini CLI works with a personal Google account, no API key. Experimental backends: kimi, qwen, openrouter, ollama (local, zero egress).
 
-Free-tier-friendly: `gemini auth` lets you use the Gemini CLI with a personal Google account, no API key.
-
-#### Cross-LLM setup
-
-Headless or CI agent that can't run an interactive OAuth login? Pass the peer API key through the MCP host's `env` block instead.
-
-```jsonc
-// .mcp.json (Claude Code, Cursor) — uses Codex via OPENAI_API_KEY
-{
-  "mcpServers": {
-    "inspectrum": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "inspectrum@latest"],
-      "env": {
-        "OPENAI_API_KEY": "<your OpenAI key>"
-      }
-    }
-  }
-}
-```
-
-```toml
-# ~/.codex/config.toml (Codex app) — uses Claude via ANTHROPIC_API_KEY
-[mcp_servers.inspectrum]
-command = "npx"
-args    = ["-y", "inspectrum@latest"]
-
-[mcp_servers.inspectrum.env]
-ANTHROPIC_API_KEY = "<your Anthropic key>"
-```
-
-Env-var lookup per reviewer: `claude` → `ANTHROPIC_API_KEY`; `codex` → `OPENAI_API_KEY`; `gemini` → `GEMINI_API_KEY` (or `GOOGLE_API_KEY` / `GOOGLE_GENAI_USE_VERTEXAI`). Don't commit `.mcp.json` with real keys; the repo's `.gitignore` excludes `/.mcp.json`.
-
-#### Terminal install (skip the agent prompt)
+Headless or CI host that can't run an interactive login? Pass the peer API key through the MCP host's `env` block instead — `OPENAI_API_KEY` (codex), `ANTHROPIC_API_KEY` (claude), `GEMINI_API_KEY` (gemini). Manual JSON/TOML examples live under [`examples/`](examples/).
 
 ```bash
-# Claude Code, user-wide
-claude mcp add --transport stdio --scope user inspectrum -- npx -y inspectrum@latest
+# Register the MCP server without the plugin:
+claude mcp add --transport stdio --scope user inspectrum -- npx -y inspectrum@latest   # Claude Code
+codex mcp add inspectrum -- npx -y inspectrum@latest                                   # Codex
 
-# Claude Code, project-shared (commits .mcp.json)
-claude mcp add --transport stdio --scope project inspectrum -- npx -y inspectrum@latest
+# Manual hook install (no plugin) — add to ~/.claude/settings.json:
+#   "hooks": { "PreToolUse": [ { "matcher": "ExitPlanMode", "hooks":
+#     [ { "type": "command", "command": "npx -y inspectrum@latest plan-gate", "timeout": 600 } ] } ] }
 
-# Codex
-codex mcp add inspectrum -- npx -y inspectrum@latest
-
-# Verify
+# Verify everything:
 npx -y inspectrum@latest doctor
 ```
 
 </details>
 
 <details>
-<summary>Privacy</summary>
+<summary><b>Privacy</b> — what leaves your machine, what stays</summary>
 
-- Session logs live at `~/.inspectrum/sessions/<timestamp>__<id>/` and contain your full plan + each reviewer's transcript. v0.1.0 sets the directory permissions to **0700 on POSIX** so other users on the same machine can't read them. Sessions written by older versions stay on their original perms — retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
-- **Never paste secrets into the plan or context.** They get written to disk and sent to every active reviewer.
-- Cloud routes (what gets sent where): **claude** → Anthropic via Claude Code OAuth keychain or `ANTHROPIC_API_KEY`; **codex** → OpenAI via ChatGPT login or `OPENAI_API_KEY`; **gemini** → Google via `gemini auth` or `GEMINI_API_KEY`; **kimi** → Moonshot via `MOONSHOT_API_KEY` *(experimental)*; **qwen** → Alibaba DashScope via `DASHSCOPE_API_KEY` *(experimental)*; **openrouter** → openrouter.ai → upstream provider chosen by `model`, via `OPENROUTER_API_KEY`; **ollama** → localhost only, with no network egress unless you reconfigure `endpoint`.
-- **Codex flags inspectrum passes.** `codex exec --ephemeral --skip-git-repo-check -s read-only …` plus `-m <model>` / `-c model_reasoning_effort=<effort>` when configured. `--skip-git-repo-check` bypasses the per-project trust prompt so plan review works from any cwd. `--ephemeral` keeps codex from persisting session files. `-s read-only` pins the sandbox explicitly — review must never write; user-supplied `-s`/`--sandbox` args are stripped.
+- Session logs live at `~/.inspectrum/sessions/<timestamp>__<id>/` and contain your full plan plus a Markdown record of each reviewer's verdict and findings. Directory perms are **0700 on POSIX**. Logs written by pre-0.1.0 versions keep their original perms — retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
+- **Never paste secrets into a plan or context.** The plan is written to the local session log, and both the plan and context are sent to every active reviewer.
+- Cloud routes: **claude** → Anthropic (OAuth keychain or `ANTHROPIC_API_KEY`); **codex** → OpenAI (ChatGPT login or `OPENAI_API_KEY`); **gemini** → Google (personal-account CLI login or `GEMINI_API_KEY`); **openrouter** → openrouter.ai; **ollama** → localhost only, zero egress unless you change `endpoint`.
+- Codex is invoked as `codex exec --ephemeral --skip-git-repo-check -s read-only …` in a throwaway temp directory — the sandbox is pinned read-only, sandbox-weakening and cwd-override args from your config are stripped, and codex persists no session files.
 
 </details>
+
+## FAQ
+
+**Does this slow me down?**
+Only when it should. An approve verdict adds one review pass (seconds to a couple of minutes depending on effort); a bounced plan was a plan you *wanted* bounced. Within a session, an unchanged plan is cached and not re-reviewed.
+
+**What if Codex is down / logged out / not installed?**
+The gate fails open with a visible warning and your plan proceeds untouched. An operational error never blocks your work — that's an architecture invariant, not a best effort.
+
+**Can it approve a plan behind my back?**
+No. The gate can only *delay* the approval dialog (while Claude revises) — it can never click it. You see and approve every plan that ships.
+
+**Do I need API keys?**
+No. Codex reviews run on your ChatGPT Plus/Pro subscription; Claude reviews on your Claude Pro/Max subscription. API keys are supported for headless/CI setups.
+
+**My prompt/plan is sensitive — where does it go?**
+To the reviewer(s) you configured, and to a local session log under `~/.inspectrum/sessions/` (0700). Nothing else. Use ollama for a fully local, zero-egress reviewer.
 
 ## Troubleshooting
 
@@ -281,6 +282,14 @@ npm install -g inspectrum
 claude mcp add --transport stdio --scope user inspectrum -- inspectrum
 ```
 
-## License + author
+**Gate feels slow?** Set `effort = "medium"` in `[reviewers.codex]` (see Tuning). **Something else?** `npx -y inspectrum@latest doctor` diagnoses install, login, and model resolution in one shot — [open an issue](https://github.com/yannmenec/inspectrum/issues) with its output.
 
-MIT — [Yann Menec](https://github.com/yannmenec). Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+---
+
+<div align="center">
+
+**If inspectrum caught a bad plan for you, [star the repo ⭐](https://github.com/yannmenec/inspectrum) — it's how other agent-wranglers find it.**
+
+MIT — [Yann Menec](https://github.com/yannmenec). Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+</div>
