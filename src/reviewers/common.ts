@@ -320,8 +320,25 @@ async function runClaudeJsonReview(opts: {
 const CODEX_RESERVED: ReservedFlags = {
   // `exec` is the codex subcommand we always inject; if a user re-passes it,
   // drop the duplicate. `--ephemeral` is a bool flag.
-  bool: ["exec", "--ephemeral", "--skip-git-repo-check"],
-  paired: ["-m", "--model", "-s", "--sandbox", "--output-schema", "--output-last-message"],
+  bool: [
+    "exec",
+    "--ephemeral",
+    "--skip-git-repo-check",
+    "--dangerously-bypass-approvals-and-sandbox",
+    "--dangerously-bypass-hook-trust",
+  ],
+  paired: [
+    "-m",
+    "--model",
+    "-s",
+    "--sandbox",
+    "-a",
+    "--ask-for-approval",
+    "-C",
+    "--cd",
+    "--output-schema",
+    "--output-last-message",
+  ],
 };
 
 async function runCodexJsonReview(opts: {
@@ -358,7 +375,7 @@ async function runCodexJsonReview(opts: {
       ...userArgs,
       opts.systemPrompt,
     ];
-    await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
+    await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
     return parseRawReview(readFileSync(outputFile, "utf8"), opts.reviewerId, opts.label);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -448,6 +465,7 @@ function spawnCollect(opts: {
   stdin: string;
   timeoutMs: number;
   label: string;
+  cwd?: string;
 }): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -464,7 +482,7 @@ function spawnCollect(opts: {
 
     let proc: ChildProcessWithoutNullStreams;
     try {
-      proc = spawn(opts.binary, opts.args, { stdio: ["pipe", "pipe", "pipe"] });
+      proc = spawn(opts.binary, opts.args, { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"] });
     } catch (err) {
       reject(new ReviewerOperationalError(`${opts.label} reviewer failed to start: ${errorMessage(err)}`));
       return;
