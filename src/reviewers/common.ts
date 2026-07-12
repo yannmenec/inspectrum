@@ -336,6 +336,7 @@ const CODEX_RESERVED: ReservedFlags = {
     "--ask-for-approval",
     "-C",
     "--cd",
+    "--add-dir",
     "--output-schema",
     "--output-last-message",
   ],

@@ -376,6 +376,20 @@ describe("CodexReviewer", () => {
     expect(args[args.indexOf("-s") + 1]).toBe("read-only");
   });
 
+  it("strips user-provided writable directory overrides", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
+    mockSpawn.mockReturnValue(makeMockProcess(0));
+    const cfgAddDir: ReviewerConfig = {
+      type: "cli",
+      args: ["--add-dir", "/tmp", "--add-dir=/tmp"],
+    };
+    await new CodexReviewer("codex", cfgAddDir).review("# Plan", "all");
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).not.toContain("--add-dir");
+    expect(args).not.toContain("/tmp");
+    expect(args).not.toContain("--add-dir=/tmp");
+  });
+
   it("passes -c model_reasoning_effort=<effort> when effort is configured", async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validRawReview) as never);
     mockSpawn.mockReturnValue(makeMockProcess(0));
