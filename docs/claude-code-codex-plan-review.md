@@ -101,7 +101,7 @@ Inspect the evidence after the call:
 └── revised-plan.md       # only when a reviewer returned one
 ```
 
-The deterministic wiring test in [`scripts/e2e-plan-gate.sh`](https://github.com/yannmenec/inspectrum/blob/main/scripts/e2e-plan-gate.sh) verifies deny → revision → approve, fail-open behavior and the two-round budget with a reviewer stub. It proves hook behavior, not model quality.
+The deterministic E2E harness in [`scripts/e2e-plan-gate.sh`](https://github.com/yannmenec/inspectrum/blob/main/scripts/e2e-plan-gate.sh) verifies deny → revision → approve with a reviewer stub. Contract and unit tests cover fail-open behavior and the two-round denial budget. These tests prove hook behavior, not model quality.
 
 ## Use it a second time
 
