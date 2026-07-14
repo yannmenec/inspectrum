@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "registered_at": "2026-07-14T15:37:47Z",
+  "package": {
+    "spec": "inspectrum@0.2.1",
+    "version": "0.2.1",
+    "integrity": "sha512-64LAFaTKHuK8neu4KlqdQsaZ/3n+qg06dDqsC5zX6XHGd6s127NUqDh5QvR8FhiD1p6JYzNZJZoxXG1LUM2bgA==",
+    "shasum": "0df1e688a573c9b209355e22b4511fc184b2b355",
+    "git_head": "93c0290bdb45d6bd25c5f79041321d6e09c4d729"
+  },
+  "condition": {
+    "reviewers": ["codex"],
+    "focus": "all",
+    "judge": false,
+    "codex_cli": "0.144.2",
+    "model": "gpt-5.6-sol",
+    "model_source": "Resolved by inspectrum@0.2.1 doctor on 2026-07-14; this alias may be mutable.",
+    "effort": "high",
+    "codex_args": ["--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only"],
+    "reviewer_timeout_seconds": 300,
+    "sdk_timeout_seconds": 310
+  },
+  "corpus": {
+    "kind": "synthetic",
+    "fixture_count": 8,
+    "labels_hidden_from_requests": true,
+    "fixtures": {
+      "ambiguous": { "path": "tests/fixtures/plans/ambiguous.md", "sha256": "4d88ed1320a33cb1cef2de4d764121c7766aead9b8c95b2a0ad95eb3b2d4feeb" },
+      "missing-rollback": { "path": "tests/fixtures/plans/missing-rollback.md", "sha256": "89ac8ed64494c260926b8b96054a194f7e68565ca19d06df60e98deb9da6937e" },
+      "missing-tests": { "path": "tests/fixtures/plans/missing-tests.md", "sha256": "b3ed064285f1a2994a6dd292ae090823f9d66a299ab105855d719bd195670c8e" },
+      "over-engineered": { "path": "tests/fixtures/plans/over-engineered.md", "sha256": "6c6d507cf6c4e8977e7985ace2d870404238f1a4d160e5707f44cd4904329d02" },
+      "perf-blind": { "path": "tests/fixtures/plans/perf-blind.md", "sha256": "8a304661d198cba4d081135b6787e5b2625e16ca8ed05f267bf9c37ba49e31eb" },
+      "scope-creep": { "path": "tests/fixtures/plans/scope-creep.md", "sha256": "bcef87e74bffc5421a4c7b3a376824d0c7b99ab76bb12d30ed6ce8ee72d457e4" },
+      "security-flaw": { "path": "tests/fixtures/plans/security-flaw.md", "sha256": "030da47334bbf4db4c69fb3ea40471c5186e87218cc60660b56ca8713c170917" },
+      "trivial-correct": { "path": "tests/fixtures/plans/trivial-correct.md", "sha256": "9d83ef8a78b5885ec850d89db0ac3f32b48a0fedc9ea174c9b3b4c6317c84715" }
+    }
+  },
+  "execution": {
+    "blocks": 3,
+    "calls": 24,
+    "server_lifecycle": "One fresh published MCP server per block; eight sequential calls per server.",
+    "maximum_wallclock_seconds": 10800,
+    "selective_retries": false,
+    "stop_rule": "Finish 24 calls or stop on the wallclock cap/systemic failure; never stop based on observed quality.",
+    "incomplete_rule": "Fewer than three complete blocks is a pilot; zero complete blocks blocks promotion."
+  },
+  "artifact_hashes": {
+    "run.mjs": "85a7496431e3a88e2fd59fbc5a800aa284844f7f4f509ec35221d8e1ecb30045",
+    "lib.mjs": "57ddb14dc76d9432204c1b39de359220387f83e90cb3e642e3f3b2cc39c73655",
+    "codex-trace-wrapper.mjs": "960d04e3f21a26ad942614eb9f79b9356e3aa085aa5aa0d16904bd54fda74296",
+    "orders.json": "01ff4f3810a19d645694409a093fb127ccab4760dbb4f011c685b324acfb7c15",
+    "oracle.json": "c3a04ead657f190041bc42b113384cac610949247151c28b078916fc59b0e149"
+  },
+  "featured_fixtures": ["security-flaw", "missing-rollback", "over-engineered"],
+  "metrics": [
+    "legacy verdict agreement",
+    "acceptable verdict agreement",
+    "micro and macro expected-category recall",
+    "2-of-3 expected-category detection",
+    "k/n non-approvals on the single correct fixture",
+    "MCP/tool/schema/reviewer/session operational success",
+    "median and nearest-rank p95 tool-call latency"
+  ],
+  "excluded_metrics": ["precision", "F1", "confidence intervals", "competitor performance", "latency comparison to always-approve"]
+}

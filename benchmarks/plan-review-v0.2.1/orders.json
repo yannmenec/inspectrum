@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "seed": "inspectrum-v0.2.1-synthetic-2026-07-14",
+  "algorithm": "Sort fixture IDs by SHA-256(seed + ':' + block + ':' + fixture_id)",
+  "blocks": [
+    ["missing-rollback", "ambiguous", "over-engineered", "trivial-correct", "missing-tests", "scope-creep", "security-flaw", "perf-blind"],
+    ["trivial-correct", "ambiguous", "security-flaw", "perf-blind", "scope-creep", "over-engineered", "missing-rollback", "missing-tests"],
+    ["trivial-correct", "security-flaw", "perf-blind", "missing-tests", "scope-creep", "ambiguous", "missing-rollback", "over-engineered"]
+  ]
+}

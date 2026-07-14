@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "labels_are_exhaustive": false,
+  "note": "These are author-defined expectations for synthetic fixtures, not real-world ground truth.",
+  "fixtures": {
+    "ambiguous": {
+      "legacy_verdict": "revise",
+      "acceptable_verdicts": ["revise"],
+      "expected_categories": ["completeness", "clarity"],
+      "rationale": "The plan names real risks but leaves proxy trust and the 429 contract unresolved."
+    },
+    "missing-rollback": {
+      "legacy_verdict": "revise",
+      "acceptable_verdicts": ["revise"],
+      "expected_categories": ["risk"],
+      "rationale": "A destructive migration over a large production table has no rollback or recovery path."
+    },
+    "missing-tests": {
+      "legacy_verdict": "revise",
+      "acceptable_verdicts": ["revise"],
+      "expected_categories": ["completeness"],
+      "rationale": "The acceptance criterion is not backed by a test plan."
+    },
+    "over-engineered": {
+      "legacy_verdict": "revise",
+      "acceptable_verdicts": ["revise"],
+      "expected_categories": ["clarity", "risk"],
+      "rationale": "The architecture is disproportionate to a small internal CRUD tool."
+    },
+    "perf-blind": {
+      "legacy_verdict": "revise",
+      "acceptable_verdicts": ["revise"],
+      "expected_categories": ["correctness", "risk"],
+      "rationale": "The SQL has a duplicate WHERE clause and the 8M-row substring scan lacks a credible 500-RPS validation path."
+    },
+    "scope-creep": {
+      "legacy_verdict": "revise",
+      "acceptable_verdicts": ["revise"],
+      "expected_categories": ["risk"],
+      "rationale": "A dark-mode ticket expands into several unrelated migrations and a 14-week program."
+    },
+    "security-flaw": {
+      "legacy_verdict": "reject",
+      "acceptable_verdicts": ["revise", "reject"],
+      "expected_categories": ["correctness", "risk"],
+      "rationale": "A 30-day JWT in localStorage creates material token-theft exposure; revise and reject are both admitted because the design is severe but repairable."
+    },
+    "trivial-correct": {
+      "legacy_verdict": "approve",
+      "acceptable_verdicts": ["approve"],
+      "expected_categories": [],
+      "rationale": "The small endpoint change includes a focused test and documentation update."
+    }
+  }
+}
