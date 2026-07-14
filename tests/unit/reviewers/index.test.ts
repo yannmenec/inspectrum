@@ -101,7 +101,7 @@ describe("createReviewer", () => {
 describe("createReviewer timeout wiring", () => {
   // timeoutMs is a TS-private constructor field; runtime access is fine in tests.
   const timeoutOf = (r: unknown): number => (r as { timeoutMs: number }).timeoutMs;
-  const limits = { plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 300 };
+  const limits = { report_max_chars: 8000, timeout_seconds: 300 };
 
   it("prefers the reviewer's own timeout_seconds over limits", () => {
     const reviewer = createReviewer("codex", { type: "cli", timeout_seconds: 120 }, limits);

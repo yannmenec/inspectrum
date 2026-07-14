@@ -27,7 +27,7 @@ const FAKE_CONFIG = {
   version: 1,
   defaults: { reviewers: ["claude"], judge: "claude", focus: "all" as const },
   reviewers: { claude: { type: "cli" as const, binary: "claude" } },
-  limits: { plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 60 },
+  limits: { report_max_chars: 8000, timeout_seconds: 60 },
 };
 
 const CANNED_OUTPUT = {

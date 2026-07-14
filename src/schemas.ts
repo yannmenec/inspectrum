@@ -72,6 +72,12 @@ export const ClaudeEnvelopeSchema = z.object({
   result: z.string(),
 });
 
+export const ClaudePluginListSchema = z.array(z.looseObject({
+  id: z.string(),
+  version: z.string().optional(),
+  enabled: z.boolean(),
+}));
+
 export const ReviewerConfigSchema = z.object({
   type: z.enum(["cli", "http"]).default("cli"),
   backend: z.enum(["claude", "codex", "gemini", "ollama", "openrouter", "kimi", "qwen"]).optional(),
@@ -103,11 +109,10 @@ export const ConfigSchema = z.object({
     }),
   limits: z
     .object({
-      plan_max_chars: z.number().int().default(16000),
       report_max_chars: z.number().int().default(8000),
       timeout_seconds: z.number().int().default(300),
     })
-    .default({ plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 300 }),
+    .default({ report_max_chars: 8000, timeout_seconds: 300 }),
   plan_gate: z
     .object({
       enabled: z.boolean().default(true),
