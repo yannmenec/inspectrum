@@ -15,13 +15,14 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function runShim(mode: string, options: { home?: boolean; npx?: boolean; version?: string } = {}) {
+function runShim(mode: string, options: { home?: boolean; homeAccessible?: boolean; npx?: boolean; version?: string } = {}) {
   const root = mkdtempSync(join(tmpdir(), "inspectrum-shim-"));
   tempDirs.push(root);
   const bin = join(root, "bin");
   const home = join(root, "home");
   const npxLog = join(root, "npx.log");
   const globalLog = join(root, "global.log");
+  const completedLog = join(root, "completed.log");
   mkdirSync(bin);
   mkdirSync(home);
 
@@ -33,6 +34,8 @@ printf '%s\\n' "$*" >> "$NPX_LOG"
 case "$NPX_MODE:$*" in
   mismatch:*--version*) printf '%s\\n' "$NPX_VERSION" ;;
   offline:*|failure:*) printf '%s\\n' 'npm unavailable' >&2; exit 1 ;;
+  hanging:*) sleep 5 ;;
+  noisy:*) head -c 1048576 /dev/zero | tr '\\000' x; printf done > "$NPX_COMPLETED_LOG" ;;
   malformed:*--version*) printf '%s\\n' "$NPX_VERSION" ;;
   malformed:*plan-gate*) printf '%s\\n' 'not-json' ;;
   empty:*--version*) printf '%s\\n' "$NPX_VERSION" ;;
@@ -56,19 +59,26 @@ esac
     GLOBAL_LOG: globalLog,
     NPX_MODE: mode,
     NPX_VERSION: options.version ?? packageVersion,
+    NPX_COMPLETED_LOG: completedLog,
+    INSPECTRUM_NPX_TIMEOUT_MS: "1000",
   };
   if (options.home !== false) env["HOME"] = home;
+  if (options.homeAccessible === false) chmodSync(home, 0o000);
 
   const result = spawnSync("/bin/sh", [shim], {
     cwd: repoRoot,
     env,
     input: '{"tool_name":"ExitPlanMode"}',
     encoding: "utf8",
+    timeout: 2_000,
+    maxBuffer: 2 * 1024 * 1024,
   });
+  if (options.homeAccessible === false) chmodSync(home, 0o700);
   return {
     ...result,
     npxCalls: existsSync(npxLog) ? readFileSync(npxLog, "utf8").trim().split("\n") : [],
     globalCalled: existsSync(globalLog),
+    npxCompleted: existsSync(completedLog),
   };
 }
 
@@ -97,9 +107,16 @@ describe("plan-gate shim contract", () => {
     expectFailOpen(result.stdout);
   });
 
-  it.each(["offline", "failure", "malformed"])("fails open on %s bootstrap/output failure", (mode) => {
+  it.each(["offline", "failure", "malformed", "hanging"])("fails open on %s bootstrap/output failure", (mode) => {
     const result = runShim(mode);
     expect(result.status).toBe(0);
+    expectFailOpen(result.stdout);
+  });
+
+  it("bounds bootstrap output before failing open", () => {
+    const result = runShim("noisy");
+    expect(result.status).toBe(0);
+    expect(result.npxCompleted).toBe(false);
     expectFailOpen(result.stdout);
   });
 
@@ -107,6 +124,12 @@ describe("plan-gate shim contract", () => {
     const result = runShim("success", { home: false });
     expect(result.status).toBe(0);
     expect(result.npxCalls).toEqual([]);
+    expectFailOpen(result.stdout);
+  });
+
+  it("fails open when HOME is inaccessible", () => {
+    const result = runShim("success", { homeAccessible: false });
+    expect(result.status).toBe(0);
     expectFailOpen(result.stdout);
   });
 

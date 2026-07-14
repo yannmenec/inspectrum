@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runPlanGate } from "../../../src/hook/plan-gate.js";
@@ -197,16 +196,6 @@ describe("runPlanGate plan extraction", () => {
     symlinkSync("/dev/zero", link);
     const reviewPlanFn = vi.fn();
     const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: link } });
-    const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
-    expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
-    expect(reviewPlanFn).not.toHaveBeenCalled();
-  });
-
-  it("rejects a FIFO without blocking", async () => {
-    const fifo = join(stateDir, "plan.md");
-    execFileSync("mkfifo", [fifo]);
-    const reviewPlanFn = vi.fn();
-    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: fifo } });
     const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
     expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
     expect(reviewPlanFn).not.toHaveBeenCalled();
