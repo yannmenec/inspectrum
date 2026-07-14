@@ -72,6 +72,11 @@ describe("distribution metadata", () => {
     expect(readme).not.toContain("no per-token bill");
     expect(readme).not.toContain("releases/latest/download/inspectrum.mcpb");
     expect(readme).not.toMatch(/npx[^\n]*inspectrum@latest plan-gate/);
-    expect(readme).toContain("macOS-only v0.2.1 bundle");
+    // The Claude Desktop row must offer the repaired, versioned bundle (derived
+    // from package.json so it can't drift) and still warn users off the broken one.
+    expect(readme).toContain(
+      `releases/download/v${pkg.version}/inspectrum-${pkg.version}.mcpb`,
+    );
+    expect(readme).toContain("v0.2.0 bundle was incomplete");
   });
 });
