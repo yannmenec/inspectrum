@@ -43,6 +43,12 @@ describe.skipIf(!HAS_DIST)("MCP server — stdio e2e smoke", () => {
     expect(result.tools).toHaveLength(1);
     const tool = result.tools[0]!;
     expect(tool.name).toBe("review_plan");
+    expect(tool.annotations).toMatchObject({
+      readOnlyHint: false,
+      idempotentHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
     expect(tool.inputSchema).toBeDefined();
     const inputProps = (tool.inputSchema.properties ?? {}) as Record<string, unknown>;
     expect(Object.keys(inputProps).sort()).toEqual(["context", "focus", "judge", "plan", "reviewers"]);

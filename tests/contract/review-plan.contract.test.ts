@@ -166,7 +166,7 @@ describe("MCP tool wiring (InMemoryTransport)", () => {
         inputSchema: ReviewPlanToolShape,
         outputSchema: ReviewPlanToolOutputShape,
         annotations: {
-          readOnlyHint: true,
+          readOnlyHint: false,
           idempotentHint: false,
           destructiveHint: false,
           openWorldHint: true,

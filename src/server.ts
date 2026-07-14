@@ -28,11 +28,11 @@ server.registerTool(
     description:
       "Review a development/architecture plan with peer LLMs and return a consolidated verdict " +
       "(approve | revise | reject) with prioritized findings. " +
-      "Read-only, writes a session log to ~/.inspectrum/sessions/.",
+      "Runs configured reviewer CLIs and writes a local session log to ~/.inspectrum/sessions/.",
     inputSchema: ReviewPlanToolShape,
     outputSchema: ReviewPlanToolOutputShape,
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false,
       idempotentHint: false,
       destructiveHint: false,
       openWorldHint: true,
