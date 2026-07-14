@@ -10,6 +10,7 @@ const root = resolve(import.meta.dirname, "..", "..");
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const lock = JSON.parse(readFileSync(resolve(root, "package-lock.json"), "utf8"));
 const plugin = JSON.parse(readFileSync(resolve(root, ".claude-plugin/plugin.json"), "utf8"));
+const registry = JSON.parse(readFileSync(resolve(root, "server.json"), "utf8"));
 
 describe("distribution metadata", () => {
   it("publishes npm and MCP Registry discovery metadata", () => {
@@ -36,6 +37,27 @@ describe("distribution metadata", () => {
     expect(lock.packages["node_modules/fast-uri"].version).toBe("3.1.4");
     expect(pkg.overrides).toEqual({ "external-editor": { tmp: "0.2.7" } });
     expect(lock.packages["node_modules/tmp"].version).toBe("0.2.7");
+  });
+
+  it("keeps the MCP Registry manifest aligned with npm metadata", () => {
+    expect(registry.$schema).toBe(
+      "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    );
+    expect(registry.name).toBe(pkg.mcpName);
+    expect(registry.version).toBe(pkg.version);
+    expect(registry.description.length).toBeLessThanOrEqual(100);
+    expect(registry.repository).toEqual({
+      url: "https://github.com/yannmenec/inspectrum",
+      source: "github",
+      id: "1242227459",
+    });
+    expect(registry.packages).toEqual([expect.objectContaining({
+      registryType: "npm",
+      registryBaseUrl: "https://registry.npmjs.org",
+      identifier: pkg.name,
+      version: pkg.version,
+      transport: { type: "stdio" },
+    })]);
   });
 
   it("derives every MCPB versioned field from package.json", () => {
