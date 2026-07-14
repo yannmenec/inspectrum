@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-14T16:01:19.345Z",
+  "source_sha256": "636cdcd18bb3149d8a59d29c09e0b5074697d93774e1fa02902659f8af659936",
+  "output_sha256": "af015c0aa2a1322baf35f855f181d0d01d889882ffe4a2d71d13ea672bc8e16a",
+  "record_count": 24,
+  "transformations": [
+    {
+      "id": "codex-temp-macos-v1",
+      "target": "$CODEX_TMP"
+    },
+    {
+      "id": "codex-temp-unix-v1",
+      "target": "$CODEX_TMP"
+    }
+  ],
+  "scope": "publication paths only; model requests, responses, scores, and ordering are unchanged"
+}

@@ -1,0 +1,9 @@
+fixture,attempts,semantic_calls,legacy_agreements,acceptable_agreements,verdicts,expected_category_hits,expected_category_total
+ambiguous,3,3,3,3,revise|revise|revise,5,6
+missing-rollback,3,3,0,0,reject|reject|reject,3,3
+missing-tests,3,3,3,3,revise|revise|revise,3,3
+over-engineered,3,3,3,3,revise|revise|revise,3,6
+perf-blind,3,3,0,0,reject|reject|reject,6,6
+scope-creep,3,3,2,2,reject|revise|revise,3,3
+security-flaw,3,3,2,3,reject|revise|reject,5,6
+trivial-correct,3,3,3,3,approve|approve|approve,0,0

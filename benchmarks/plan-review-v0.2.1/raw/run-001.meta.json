@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "run_id": "run-001",
+  "started_at": "2026-07-14T15:47:36.366Z",
+  "ended_at": "2026-07-14T15:58:07.401Z",
+  "attempted_calls": 24,
+  "planned_calls": 24,
+  "complete": true,
+  "runtime": {
+    "node": "v25.9.0",
+    "npm": "11.12.1",
+    "os": "darwin",
+    "arch": "arm64",
+    "codex_cli": "codex-cli 0.144.2",
+    "codex_binary": "$CODEX_BIN",
+    "codex_home": "$CODEX_HOME",
+    "original_home": "$HOME",
+    "model": "gpt-5.6-sol",
+    "model_alias_may_be_mutable": true,
+    "effort": "high",
+    "environment_keys_forwarded": [
+      "CODEX_HOME",
+      "CODEX_REAL_BINARY",
+      "HOME",
+      "INSPECTRUM_CALL_ID_FILE",
+      "INSPECTRUM_CAPTURE_DIR",
+      "NO_COLOR",
+      "PATH",
+      "TMPDIR"
+    ]
+  },
+  "errors": []
+}

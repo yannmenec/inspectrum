@@ -28,7 +28,14 @@ const summary = {
 };
 await writeFile(join(benchmarkDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 await writeFile(join(benchmarkDir, "summary.csv"), toCsv(summary));
-await writeFile(join(benchmarkDir, "RESULTS.md"), toMarkdown(summary));
+const markdown = toMarkdown(summary).replace(
+  "The conceptual always-approve baseline",
+  "Macro recall is the unweighted mean across the seven fixtures with at least one expected category. " +
+    "The two-of-three measure covers 11 fixture-category pairs and counts a pair only when the " +
+    "category appears in at least two of its three repetitions.\n\n" +
+    "The conceptual always-approve baseline",
+);
+await writeFile(join(benchmarkDir, "RESULTS.md"), markdown);
 console.log(JSON.stringify(summary, null, 2));
 
 function toCsv(value) {
@@ -49,7 +56,14 @@ function toCsv(value) {
 }
 
 function toMarkdown(value) {
-  return `# Synthetic evaluation results\n\nStatus: **${value.status}**. Generated from ${value.attempts} attempted calls across ${value.completed_blocks}/3 complete blocks.\n\n## Results\n\n- Operational success: ${value.operations.full_success}/${value.attempts}.\n- Legacy-verdict agreement on semantic responses: ${displayRatio(value.verdict_agreement.legacy)}.\n- Acceptable-verdict agreement on semantic responses: ${displayRatio(value.verdict_agreement.acceptable)}.\n- Expected-category micro recall: ${displayRatio(value.category_recall.micro)}.\n- Expected-category macro recall: ${displayNumber(value.category_recall.macro_ratio)}.\n- Two-of-three expected-category detection: ${displayRatio(value.category_recall.majority)}.\n- Single correct fixture: ${value.correct_fixture.non_approvals}/${value.correct_fixture.attempts} non-approvals; this is not a general false-positive rate.\n- Tool-call latency on full operational successes: median ${displayMs(value.latency.median_ms)}, nearest-rank p95 ${displayMs(value.latency.p95_ms)} (n=${value.latency.success_count}).\n\nThe conceptual always-approve baseline agrees with 1/8 historical verdict labels and recalls none of the expected issue categories. No latency or operational comparison is made.\n\n## Limits\n\n${value.caveats.map((item) => `- ${item}`).join("\n")}\n\nSee \`summary.json\`, \`summary.csv\`, the public JSONL records, \`oracle.json\` and \`preregistration.json\` for reproduction and raw evidence.\n`;
+  const fixtureRows = Object.entries(value.per_fixture).map(([fixture, result]) =>
+    `| ${fixture} | ${result.verdicts.join(", ")} | ${result.legacy_agreements}/${result.semantic_calls} | ${result.acceptable_agreements}/${result.semantic_calls} | ${result.category_recall.hits}/${result.category_recall.total} |`,
+  ).join("\n");
+  const stages = Object.entries(value.operations)
+    .filter(([stage]) => stage !== "full_success")
+    .map(([stage, count]) => `- ${stage.replaceAll("_", " ")}: ${count}/${value.attempts}.`)
+    .join("\n");
+  return `# Synthetic evaluation results\n\nStatus: **${value.status}**. Generated from ${value.attempts} attempted calls across ${value.completed_blocks}/3 complete blocks.\n\n## Results\n\n- Operational success: ${value.operations.full_success}/${value.attempts}.\n- Legacy-verdict agreement on semantic responses: ${displayRatio(value.verdict_agreement.legacy)}.\n- Acceptable-verdict agreement on semantic responses: ${displayRatio(value.verdict_agreement.acceptable)}.\n- Expected-category micro recall: ${displayRatio(value.category_recall.micro)}.\n- Expected-category macro recall: ${displayNumber(value.category_recall.macro_ratio)}.\n- Two-of-three expected-category detection: ${displayRatio(value.category_recall.majority)}.\n- Single correct fixture: ${value.correct_fixture.non_approvals}/${value.correct_fixture.attempts} non-approvals and ${value.correct_fixture.minor_findings_on_approvals}/${value.correct_fixture.attempts} approvals with a minor finding. This is not a general false-positive rate.\n- Tool-call latency on full operational successes: median ${displayMs(value.latency.median_ms)}, nearest-rank p95 ${displayMs(value.latency.p95_ms)} (n=${value.latency.success_count}); no failed-call durations.\n\nThe conceptual always-approve baseline agrees with 1/8 historical verdict labels and recalls none of the expected issue categories. No latency or operational comparison is made.\n\n## Per fixture\n\n| Synthetic fixture | Verdicts | Historical agreement | Admissible agreement | Expected-category recall |\n|---|---|---:|---:|---:|\n${fixtureRows}\n\nThe pre-registered admissible verdict is only \`revise\` for \`missing-rollback\` and \`perf-blind\`; each was returned as \`reject\` three times. That is a severity mismatch, not a quality win.\n\n## Operational stages\n\n${stages}\n\n## Limits\n\n${value.caveats.map((item) => `- ${item}`).join("\n")}\n\nSee [the three preselected cases](CASES.md), \`summary.json\`, \`summary.csv\`, \`raw/run-001.public.jsonl\`, \`oracle.json\` and \`preregistration.json\` for reproduction and raw evidence.\n`;
 }
 
 function displayRatio(value) {

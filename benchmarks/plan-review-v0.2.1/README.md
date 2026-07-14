@@ -1,6 +1,6 @@
 # Inspectrum v0.2.1 synthetic plan-review evaluation
 
-Status: **pre-registered; results not yet run**.
+Status: **complete synthetic evaluation** — 24/24 scheduled calls completed on 2026-07-14.
 
 This is a small synthetic conformance evaluation of the published `inspectrum@0.2.1` package. It is not a real-world benchmark and does not measure developer outcomes.
 
@@ -28,16 +28,22 @@ Prerequisites: Node 20+, npm, a working Codex CLI login, and a clone with `npm i
 node benchmarks/plan-review-v0.2.1/run.mjs --dry-run
 node benchmarks/plan-review-v0.2.1/run.mjs \
   --execute \
-  --run-id run-001 \
-  --private-root /tmp/inspectrum-growth-2026-07-14/benchmark-raw
+  --run-id reproduction-001 \
+  --private-root /tmp/inspectrum-benchmark-private
+node benchmarks/plan-review-v0.2.1/publication.mjs \
+  benchmarks/plan-review-v0.2.1/raw/reproduction-001.jsonl \
+  benchmarks/plan-review-v0.2.1/raw/reproduction-001.public.jsonl \
+  benchmarks/plan-review-v0.2.1/raw/reproduction-001.publication.json
 node benchmarks/plan-review-v0.2.1/score.mjs \
-  benchmarks/plan-review-v0.2.1/raw/run-001.jsonl
+  benchmarks/plan-review-v0.2.1/raw/reproduction-001.public.jsonl
 ```
 
 The runner refuses to overwrite a run. A systemic retry must use a new run ID and retain the failed artifact.
 
 ## Raw evidence
 
-Each JSONL line will include the exact synthetic request, raw MCP response, captured Codex final message, server stderr, session files, versions, timestamps, duration, error and hashes. The public copy replaces only machine-specific paths with documented tokens. Unsanitized originals remain outside the repository and are never required to interpret the result.
+Each JSONL line includes the exact synthetic request, raw MCP response, captured Codex final message, server stderr, session files, versions, timestamps, duration, error and hashes. The public copy replaces only machine-specific paths with documented tokens. Unsanitized originals remain outside the repository and are never required to interpret the result.
 
-The three preselected editorial fixtures are `security-flaw`, `missing-rollback` and `over-engineered`; successes and misses will both be published.
+The direct runner output missed Codex-created macOS temporary paths. This was found after the run, before commit. `publication.mjs` adds a path-only post-process; `raw/run-001.publication.json` records the pre/post hashes and transformation IDs. Its `source_sha256` attests the private original but cannot be recomputed from the repository; `output_sha256` is verifiable here. Model requests, responses, scores and order are unchanged.
+
+Read [the complete results](RESULTS.md), [the three preselected synthetic cases](CASES.md), and the [public raw JSONL](raw/run-001.public.jsonl). Successes, severity mismatches and missed categories are all reported.

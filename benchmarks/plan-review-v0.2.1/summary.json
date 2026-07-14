@@ -1,0 +1,227 @@
+{
+  "generated_at": "2026-07-14T16:08:12.242Z",
+  "status": "synthetic evaluation",
+  "source_files": [
+    "benchmarks/plan-review-v0.2.1/raw/run-001.public.jsonl"
+  ],
+  "attempts": 24,
+  "completed_blocks": 3,
+  "semantic_calls": 24,
+  "verdict_agreement": {
+    "legacy": {
+      "hits": 16,
+      "total": 24,
+      "ratio": 0.6666666666666666
+    },
+    "acceptable": {
+      "hits": 17,
+      "total": 24,
+      "ratio": 0.7083333333333334
+    }
+  },
+  "category_recall": {
+    "micro": {
+      "hits": 28,
+      "total": 33,
+      "ratio": 0.8484848484848485
+    },
+    "macro_ratio": 0.880952380952381,
+    "majority": {
+      "hits": 10,
+      "total": 11,
+      "ratio": 0.9090909090909091
+    }
+  },
+  "correct_fixture": {
+    "attempts": 3,
+    "non_approvals": 0,
+    "minor_findings_on_approvals": 1
+  },
+  "operations": {
+    "mcp_started": 24,
+    "tool_responded": 24,
+    "schema_valid": 24,
+    "reviewer_succeeded": 24,
+    "session_complete": 24,
+    "full_success": 24
+  },
+  "latency": {
+    "success_count": 24,
+    "sorted_ms": [
+      4633.763,
+      5104.964,
+      8016.766583,
+      20452.588167,
+      22208.018708,
+      23145.555167,
+      25301.397042,
+      25426.563042,
+      26051.260791,
+      26240.675042,
+      26625.853167,
+      27060.690041,
+      27391.907917,
+      27638.915833,
+      27958.852708,
+      27986.295833,
+      29023.192833,
+      29612.565292,
+      29844.533875,
+      29970.357458,
+      34705.999292,
+      35585.009584,
+      38809.007709,
+      43014.993
+    ],
+    "median_ms": 27226.298979,
+    "p95_ms": 38809.007709,
+    "failure_ms": []
+  },
+  "per_fixture": {
+    "ambiguous": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "revise",
+        "revise",
+        "revise"
+      ],
+      "legacy_agreements": 3,
+      "acceptable_agreements": 3,
+      "category_recall": {
+        "hits": 5,
+        "total": 6,
+        "ratio": 0.8333333333333334
+      }
+    },
+    "missing-rollback": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "reject",
+        "reject",
+        "reject"
+      ],
+      "legacy_agreements": 0,
+      "acceptable_agreements": 0,
+      "category_recall": {
+        "hits": 3,
+        "total": 3,
+        "ratio": 1
+      }
+    },
+    "missing-tests": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "revise",
+        "revise",
+        "revise"
+      ],
+      "legacy_agreements": 3,
+      "acceptable_agreements": 3,
+      "category_recall": {
+        "hits": 3,
+        "total": 3,
+        "ratio": 1
+      }
+    },
+    "over-engineered": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "revise",
+        "revise",
+        "revise"
+      ],
+      "legacy_agreements": 3,
+      "acceptable_agreements": 3,
+      "category_recall": {
+        "hits": 3,
+        "total": 6,
+        "ratio": 0.5
+      }
+    },
+    "perf-blind": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "reject",
+        "reject",
+        "reject"
+      ],
+      "legacy_agreements": 0,
+      "acceptable_agreements": 0,
+      "category_recall": {
+        "hits": 6,
+        "total": 6,
+        "ratio": 1
+      }
+    },
+    "scope-creep": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "reject",
+        "revise",
+        "revise"
+      ],
+      "legacy_agreements": 2,
+      "acceptable_agreements": 2,
+      "category_recall": {
+        "hits": 3,
+        "total": 3,
+        "ratio": 1
+      }
+    },
+    "security-flaw": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "reject",
+        "revise",
+        "reject"
+      ],
+      "legacy_agreements": 2,
+      "acceptable_agreements": 3,
+      "category_recall": {
+        "hits": 5,
+        "total": 6,
+        "ratio": 0.8333333333333334
+      }
+    },
+    "trivial-correct": {
+      "attempts": 3,
+      "semantic_calls": 3,
+      "verdicts": [
+        "approve",
+        "approve",
+        "approve"
+      ],
+      "legacy_agreements": 3,
+      "acceptable_agreements": 3,
+      "category_recall": {
+        "hits": 0,
+        "total": 0,
+        "ratio": null
+      }
+    }
+  },
+  "always_approve_baseline": {
+    "legacy_verdict_agreement": {
+      "hits": 1,
+      "total": 8,
+      "ratio": 0.125
+    },
+    "expected_category_recall": 0,
+    "latency": null,
+    "operational_success": null
+  },
+  "caveats": [
+    "Eight synthetic fixtures are not representative of real-world plans.",
+    "Three repetitions of each fixture are repeated observations, not independent samples.",
+    "Expected categories are author-defined and non-exhaustive.",
+    "One correct fixture cannot estimate a general false-positive rate.",
+    "The recorded model alias may be mutable."
+  ]
+}

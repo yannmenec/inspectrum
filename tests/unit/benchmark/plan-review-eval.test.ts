@@ -9,6 +9,7 @@ import {
   normalizeForPublication,
   scoreRecords,
 } from "../../../benchmarks/plan-review-v0.2.1/lib.mjs";
+import { normalizeEphemeralPaths } from "../../../benchmarks/plan-review-v0.2.1/publication.mjs";
 
 const ok = {
   mcp_started: true,
@@ -39,6 +40,21 @@ describe("plan-review synthetic evaluation", () => {
       cwd: "$REPO/run",
       output: "saved $RUN_ROOT/result.json",
       nested: ["$CODEX_HOME/auth.json", "unchanged"],
+    });
+  });
+
+  it("normalizes Codex-created ephemeral paths before publication", () => {
+    const value = {
+      macos: "/private/var/folders/cv/opaque/T/inspectrum-codex-Ab12/output.json",
+      macosAlias: "/var/folders/cv/opaque/T/inspectrum-codex-Z9/schema.json",
+      unix: "/tmp/inspectrum-codex-Qw3/session.json",
+      evidence: "unchanged",
+    };
+    expect(normalizeEphemeralPaths(value)).toEqual({
+      macos: "$CODEX_TMP/output.json",
+      macosAlias: "$CODEX_TMP/schema.json",
+      unix: "$CODEX_TMP/session.json",
+      evidence: "unchanged",
     });
   });
 
