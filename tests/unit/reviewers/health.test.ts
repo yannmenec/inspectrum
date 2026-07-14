@@ -110,6 +110,15 @@ describe("checkReviewer — CLI", () => {
       });
     });
 
+    it("enforces the minimum for a custom reviewer whose binary is Codex", async () => {
+      mockExecFileSync.mockReturnValue("codex-cli 0.98.9");
+      const result = await checkReviewer("peer", { type: "cli", binary: "codex" });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining("requires Codex CLI >= 0.99.0"),
+      });
+    });
+
     it("rejects an unparseable Codex version", async () => {
       mockExecFileSync.mockReturnValue("codex development build");
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
@@ -154,13 +163,15 @@ describe("checkReviewer — CLI", () => {
       expect(result).toEqual({ ok: true });
     });
 
-    it("warns when codex binary found but `codex login status` exits unsuccessfully", async () => {
+    it("fails when codex reports logged out with a non-zero status", async () => {
       mockExecFileSync.mockReturnValue("codex-cli 1.0.0" as unknown as Buffer);
       mockSpawnSync.mockReturnValue(spawnSyncResult(1, "", "Not logged in"));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
-      expect(result.ok).toBe(true);
-      expect(result.version).toBe("1.0.0");
-      expect(result.warning).toMatch(/OPENAI_API_KEY/);
+      expect(result).toMatchObject({
+        ok: false,
+        version: "1.0.0",
+        reason: "codex is not logged in",
+      });
     });
 
     it("warns when the codex login probe errors", async () => {

@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { ClaudePluginListSchema, type ReviewerConfig } from "../schemas.js";
+import { resolveReviewerBackend } from "./common.js";
 
 export interface HealthResult {
   ok: boolean;
@@ -32,7 +33,13 @@ export async function checkReviewer(id: string, config: ReviewerConfig): Promise
     }
     return checkHttp(resolveHealthEndpoint(id, config));
   }
-  return checkCli(config.backend ?? id, config.binary ?? id);
+  let backend = id;
+  try {
+    backend = resolveReviewerBackend(id, config);
+  } catch {
+    // Preserve the existing health hint for unsupported/misconfigured CLI ids.
+  }
+  return checkCli(backend, config.binary ?? id);
 }
 
 function resolveHealthEndpoint(_id: string, config: ReviewerConfig): string {
@@ -198,9 +205,9 @@ function getOauthStatus(id: string, binary: string): OauthStatus {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       });
-      if (out.status !== 0) return "unknown";
       const output = `${out.stdout ?? ""}${out.stderr ?? ""}`;
       if (/not logged in/i.test(output)) return "logged-out";
+      if (out.status !== 0) return "unknown";
       return /logged in/i.test(output) ? "logged-in" : "logged-out";
     } catch {
       return "unknown";
