@@ -39,7 +39,9 @@ export async function checkReviewer(id: string, config: ReviewerConfig): Promise
   } catch {
     // Preserve the existing health hint for unsupported/misconfigured CLI ids.
   }
-  return checkCli(backend, config.binary ?? id);
+  // Default to the backend's binary, exactly like the review path in common.ts.
+  // Falling back to `id` would probe `codex-high` for an aliased Codex reviewer.
+  return checkCli(backend, config.binary ?? backend);
 }
 
 function resolveHealthEndpoint(_id: string, config: ReviewerConfig): string {
@@ -135,8 +137,14 @@ interface ParsedCodexVersion {
   prerelease?: string;
 }
 
+const ANSI_ESCAPE = /\x1b\[[0-9;]*m/g;
+
 export function parseCodexVersion(output: string): ParsedCodexVersion | undefined {
-  const match = output.trim().match(/^(?:codex|codex-cli)\s+v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/i);
+  // Search rather than anchor: a colour code, a wrapper banner, or an npm update
+  // notice around the version line must not turn a healthy Codex into a red doctor.
+  const match = output
+    .replace(ANSI_ESCAPE, "")
+    .match(/\bcodex(?:-cli)?\s+v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?\b/i);
   if (!match) return undefined;
   const prerelease = match[4];
   return {
