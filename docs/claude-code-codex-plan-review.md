@@ -4,7 +4,7 @@ By [Yann Menec](https://github.com/yannmenec). Installation evidence and the ben
 
 Inspectrum adds a Codex review to Claude Code plan mode before the normal human approval dialog. It can also expose the same plan-review workflow as one local stdio MCP tool, `review_plan`.
 
-This guide pins Inspectrum `0.2.1`. It is for solo developers and small teams who already use Claude Code and Codex and want a review checkpoint before implementation. It does not claim that a second model makes a plan correct.
+This guide pins the currently published Inspectrum `0.2.1` evidence snapshot. The repository also contains a locally verified `0.2.2` corrective candidate, but that version is not an installable public release until both npm and GitHub resolve it. Before any Registry or Directory submission, the installation commands must be switched to the public corrective version and rerun from an empty directory. The workflow is for solo developers and small teams who already use Claude Code and Codex and want a review checkpoint before implementation. It does not claim that a second model makes a plan correct.
 
 ## What the workflow does
 

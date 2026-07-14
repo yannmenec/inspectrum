@@ -2,7 +2,7 @@
 
 Inspectrum runs locally. It has no hosted Inspectrum service and no first-party telemetry. It does, however, send plan content to the reviewer CLIs or HTTP endpoints you configure and writes plaintext evidence to your filesystem.
 
-This document describes Inspectrum `0.2.1`. Provider and CLI behavior can change independently.
+This document covers published Inspectrum `0.2.1` and the locally verified `0.2.2` corrective candidate; the annotation-only product fix does not change this data flow. Provider and CLI behavior can change independently. Version `0.2.2` is not public until its npm package and GitHub release both resolve.
 
 ## Data you provide
 
