@@ -127,8 +127,8 @@ The gate has five explicit guardrails:
 
 | Host | Reviewer | Installation and evidence |
 |------|----------|---------------------------|
-| **Claude Code** | Codex | Plugin commands above; fresh public `0.2.1` install and deterministic hook wiring verified. A live gate transcript is not yet published because of the dated 401 noted above. |
-| **Claude Desktop** (macOS) | Codex | Download [`inspectrum-0.2.1.mcpb`](https://github.com/yannmenec/inspectrum/releases/download/v0.2.1/inspectrum-0.2.1.mcpb), open, confirm. The v0.2.1 asset's contents and MCP smoke test were verified; the earlier v0.2.0 bundle was incomplete. |
+| **Claude Code** | Codex | Fresh public `0.2.1` installation and deterministic hook wiring were verified. The corrective `0.2.2` candidate is locally verified but not yet public; a live gate transcript is also blocked by the dated 401 noted above. |
+| **Claude Desktop** (macOS) | Codex | Planned corrective asset: [`inspectrum-0.2.2.mcpb`](https://github.com/yannmenec/inspectrum/releases/download/v0.2.2/inspectrum-0.2.2.mcpb). Its local candidate passes content and MCP smoke checks, but this URL must not be treated as live until the matching release exists. The earlier v0.2.0 bundle was incomplete. |
 
 ## Tuning
 

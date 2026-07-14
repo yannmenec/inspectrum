@@ -1,6 +1,6 @@
 {
   "name": "inspectrum",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Plan review for Claude Code and stdio MCP hosts, with a bounded Codex gate and local evidence",
   "type": "module",
   "bin": {
