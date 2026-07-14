@@ -14,7 +14,7 @@ What happened, what you expected.
 - Node version (`node --version`):
 - inspectrum version (`inspectrum --version` if installed, or commit hash if from source):
 - Reviewer CLIs you have installed (output of `inspectrum doctor`):
-- MCP host (Claude Code / Codex Desktop / Cursor / other) + version:
+- MCP host (Claude Code / Codex app or CLI / Cursor / other) + version:
 
 **Steps to reproduce**
 
