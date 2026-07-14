@@ -6,6 +6,7 @@ vi.mock("node:os", () => ({ homedir: () => "/home/test" }));
 
 vi.mock("../../src/reviewers/health.js", () => ({
   checkReviewer: vi.fn(),
+  checkClaudePlugin: vi.fn(),
 }));
 
 vi.mock("../../src/config.js", () => ({
@@ -16,16 +17,17 @@ vi.mock("../../src/config.js", () => ({
       claude: { type: "cli", binary: "claude" },
     },
     defaults: { reviewers: ["claude"], judge: "claude", focus: "all" },
-    limits: { plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 60 },
+    limits: { report_max_chars: 8000, timeout_seconds: 60 },
     version: 1,
   },
 }));
 
 import { runDoctor, resolveCodexRuntime } from "../../src/doctor.js";
-import { checkReviewer } from "../../src/reviewers/health.js";
+import { checkClaudePlugin, checkReviewer } from "../../src/reviewers/health.js";
 import { loadConfig, defaultConfig } from "../../src/config.js";
 
 const mockCheckReviewer = vi.mocked(checkReviewer);
+const mockCheckClaudePlugin = vi.mocked(checkClaudePlugin);
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockFs = vi.mocked(fs);
 
@@ -34,7 +36,7 @@ const HEALTHY_CONFIG = {
     claude: { type: "cli" as const, binary: "claude" },
   },
   defaults: { reviewers: ["claude"], judge: "claude", focus: "all" as const },
-  limits: { plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 60 },
+  limits: { report_max_chars: 8000, timeout_seconds: 60 },
   version: 1,
 };
 
@@ -57,6 +59,7 @@ describe("runDoctor", () => {
     mockFs.mkdirSync.mockReturnValue(undefined);
     mockFs.accessSync.mockReturnValue(undefined);
     mockCheckReviewer.mockResolvedValue({ ok: true });
+    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "0.2.1" });
   });
 
   it("returns true when config valid, sessions writable, all reviewers ok", async () => {
@@ -133,6 +136,33 @@ describe("runDoctor", () => {
     expect(output).toContain("Config");
     expect(output).toContain("Sessions");
     expect(output).toContain("Reviewers");
+    expect(output).toContain("Claude Code plugin (optional for MCP-only users)");
+  });
+
+  it("prints the Codex version returned by the health check", async () => {
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      reviewers: { codex: { type: "cli" as const, binary: "codex" } },
+      defaults: { reviewers: ["codex"], judge: "claude", focus: "all" as const },
+    });
+    mockCheckReviewer.mockResolvedValue({ ok: true, version: "0.144.0-alpha.4" });
+    const result = await runDoctor();
+    expect(result).toBe(true);
+    expect(output).toContain("codex 0.144.0-alpha.4");
+  });
+
+  it("renders a disabled Claude plugin as an optional warning without failing doctor", async () => {
+    mockLoadConfig.mockReturnValue(HEALTHY_CONFIG);
+    mockCheckClaudePlugin.mockReturnValue({
+      ok: true,
+      version: "0.2.1",
+      warning: "inspectrum@inspectrum is installed but disabled",
+      fix: "claude plugin enable inspectrum@inspectrum",
+    });
+    const result = await runDoctor();
+    expect(result).toBe(true);
+    expect(output).toContain("installed but disabled");
+    expect(output).toContain("claude plugin enable inspectrum@inspectrum");
   });
 
   it("handles multiple reviewers — partial failure returns false", async () => {
@@ -408,6 +438,7 @@ describe("runDoctor codex runtime display", () => {
     mockFs.accessSync.mockReturnValue(undefined);
     mockFs.readFileSync.mockImplementation(() => { throw new Error("ENOENT"); });
     mockCheckReviewer.mockResolvedValue({ ok: true });
+    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "0.2.1" });
   });
 
   afterEach(() => {

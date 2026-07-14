@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import TOML from "@iarna/toml";
-import { checkReviewer } from "./reviewers/health.js";
+import { checkClaudePlugin, checkReviewer } from "./reviewers/health.js";
 import { resolveReviewerBackend } from "./reviewers/common.js";
 import { loadConfig, getConfigPath, defaultConfig } from "./config.js";
 import type { Config } from "./config.js";
@@ -133,11 +133,12 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
     }
     for (const [id, reviewerConfig] of activeEntries) {
       const result = await checkReviewer(id, reviewerConfig);
+      const label = `${id}${result.version ? ` ${result.version}` : ""}`;
       if (result.ok) {
-        if (result.warning) warn(`${id} — ${result.warning}`);
-        else pass(id);
+        if (result.warning) warn(`${label} — ${result.warning}`);
+        else pass(label);
       } else {
-        failMsg(`${id}${result.reason ? ` — ${result.reason}` : ""}`);
+        failMsg(`${label}${result.reason ? ` — ${result.reason}` : ""}`);
         if (result.fix) hint(`Fix: ${result.fix}`);
         allOk = false;
       }
@@ -152,17 +153,25 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
       section("Optional reviewers");
       for (const [id, reviewerConfig] of optionalEntries) {
         const result = await checkReviewer(id, reviewerConfig);
+        const label = `${id}${result.version ? ` ${result.version}` : ""}`;
         if (result.ok) {
-          if (result.warning) warn(`${id} — ${result.warning}`);
-          else pass(id);
+          if (result.warning) warn(`${label} — ${result.warning}`);
+          else pass(label);
         } else {
           // Optional: print status but do NOT toggle allOk.
-          process.stdout.write(`  ${R}○${Z} ${id}${result.reason ? ` — ${result.reason}` : ""}\n`);
+          process.stdout.write(`  ${R}○${Z} ${label}${result.reason ? ` — ${result.reason}` : ""}\n`);
           if (result.fix) hint(`Fix: ${result.fix}`);
         }
       }
     }
   }
+
+  section("Claude Code plugin (optional for MCP-only users)");
+  const plugin = checkClaudePlugin();
+  const pluginLabel = `inspectrum@inspectrum${plugin.version ? ` ${plugin.version}` : ""}`;
+  if (plugin.warning || !plugin.ok) warn(`${pluginLabel}${plugin.warning ? ` — ${plugin.warning}` : ""}`);
+  else pass(pluginLabel);
+  if (plugin.fix) hint(`Fix: ${plugin.fix}`);
 
   // Summary
   process.stdout.write("\n");

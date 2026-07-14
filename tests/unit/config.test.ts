@@ -30,10 +30,10 @@ judge = "codex"
     const config = loadConfig();
     expect(config.defaults.reviewers).toEqual(["codex", "gemini"]);
     expect(config.defaults.judge).toBe("codex");
-    expect(config.limits.plan_max_chars).toBe(16000);
+    expect(config.limits).toEqual({ report_max_chars: 8000, timeout_seconds: 300 });
   });
 
-  it("respects hard limits when overridden in TOML", () => {
+  it("strips the legacy plan_max_chars key while preserving live limits", () => {
     mockFs.existsSync.mockReturnValue(true);
     mockFs.readFileSync.mockReturnValue(`
 [limits]
@@ -41,7 +41,7 @@ plan_max_chars = 500
 timeout_seconds = 10
 `);
     const config = loadConfig();
-    expect(config.limits.plan_max_chars).toBe(500);
+    expect(config.limits).not.toHaveProperty("plan_max_chars");
     expect(config.limits.timeout_seconds).toBe(10);
   });
 

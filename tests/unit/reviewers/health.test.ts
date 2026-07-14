@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("node:child_process");
 
 import * as childProcess from "node:child_process";
-import { checkReviewer } from "../../../src/reviewers/health.js";
+import { checkClaudePlugin, checkReviewer } from "../../../src/reviewers/health.js";
 import type { ReviewerConfig } from "../../../src/schemas.js";
 
 const mockExecFileSync = vi.mocked(childProcess.execFileSync);
@@ -83,6 +83,79 @@ describe("checkReviewer — CLI", () => {
     });
   });
 
+  describe("Codex CLI version compatibility", () => {
+    beforeEach(() => {
+      process.env["OPENAI_API_KEY"] = "sk-test";
+    });
+
+    it.each([
+      ["codex-cli 0.99.0", "0.99.0"],
+      ["codex-cli 0.144.0-alpha.4", "0.144.0-alpha.4"],
+      ["codex 1.0.0", "1.0.0"],
+      // 0.100.0 > 0.99.0 numerically but "0.100.0" < "0.99.0" lexicographically:
+      // locks the per-component compare against a regression to a string compare.
+      ["codex-cli 0.100.0", "0.100.0"],
+      ["codex-cli 0.144.2\nUpdate available: 0.145.0", "0.144.2"],
+      ["\u001b[32mcodex-cli 0.144.2\u001b[0m", "0.144.2"],
+    ])("accepts %s and returns the parsed version", async (stdout, version) => {
+      mockExecFileSync.mockReturnValue(stdout);
+      await expect(checkReviewer("codex", { type: "cli", binary: "codex" })).resolves.toEqual({
+        ok: true,
+        version,
+      });
+    });
+
+    it.each(["codex-cli 0.98.9", "codex-cli 0.99.0-alpha.1"])("rejects unsupported version %s", async (stdout) => {
+      mockExecFileSync.mockReturnValue(stdout);
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining("requires Codex CLI >= 0.99.0"),
+        fix: "npm install -g @openai/codex@latest",
+      });
+    });
+
+    it("enforces the minimum for a custom reviewer whose binary is Codex", async () => {
+      mockExecFileSync.mockReturnValue("codex-cli 0.98.9");
+      const result = await checkReviewer("peer", { type: "cli", binary: "codex" });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining("requires Codex CLI >= 0.99.0"),
+      });
+    });
+
+    // Regression: an aliased Codex reviewer with no explicit `binary` used to probe
+    // the reviewer id ("codex-high"), so doctor reported ENOENT and told the user to
+    // reinstall a Codex that was installed and healthy. The review path in common.ts
+    // spawns the backend binary ("codex"); health must probe the same one.
+    it("probes the backend binary for an aliased Codex reviewer with no binary override", async () => {
+      mockExecFileSync.mockReturnValue("codex-cli 0.144.2");
+      const result = await checkReviewer("codex-high", { type: "cli", backend: "codex", effort: "high" });
+      expect(mockExecFileSync).toHaveBeenCalledWith("codex", ["--version"], expect.any(Object));
+      expect(result).toMatchObject({ ok: true, version: "0.144.2" });
+    });
+
+    it("rejects an unparseable Codex version", async () => {
+      mockExecFileSync.mockReturnValue("codex development build");
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining("could not parse Codex CLI version"),
+        fix: "npm install -g @openai/codex@latest",
+      });
+    });
+
+    it("treats a failing Codex version probe as incompatible", async () => {
+      mockExecFileSync.mockImplementation(() => { throw new Error("exit code 1"); });
+      const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining("could not determine Codex CLI version"),
+        fix: "npm install -g @openai/codex@latest",
+      });
+    });
+  });
+
   describe("auth env-var detection", () => {
     it("warns when claude binary found but ANTHROPIC_API_KEY unset", async () => {
       mockExecFileSync.mockReturnValue("claude 2.1.0");
@@ -106,44 +179,49 @@ describe("checkReviewer — CLI", () => {
       expect(result).toEqual({ ok: true });
     });
 
-    it("warns when codex binary found but `codex login status` exits unsuccessfully", async () => {
-      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+    it("fails when codex reports logged out with a non-zero status", async () => {
+      mockExecFileSync.mockReturnValue("codex-cli 1.0.0" as unknown as Buffer);
       mockSpawnSync.mockReturnValue(spawnSyncResult(1, "", "Not logged in"));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
-      expect(result.ok).toBe(true);
-      expect(result.warning).toMatch(/OPENAI_API_KEY/);
+      expect(result).toMatchObject({
+        ok: false,
+        version: "1.0.0",
+        reason: "codex is not logged in",
+      });
     });
 
     it("warns when the codex login probe errors", async () => {
-      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockExecFileSync.mockReturnValue("codex-cli 1.0.0" as unknown as Buffer);
       mockSpawnSync.mockImplementation(() => { throw new Error("ETIMEDOUT"); });
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
       expect(result.ok).toBe(true);
+      expect(result.version).toBe("1.0.0");
       expect(result.warning).toMatch(/OPENAI_API_KEY/);
     });
 
     it("does NOT warn when codex `login status` reports Logged in on stdout (codex ≤0.131)", async () => {
-      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockExecFileSync.mockReturnValue("codex-cli 1.0.0" as unknown as Buffer);
       mockSpawnSync.mockReturnValue(spawnSyncResult(0, "Logged in using ChatGPT", ""));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
-      expect(result).toEqual({ ok: true });
+      expect(result).toEqual({ ok: true, version: "1.0.0" });
     });
 
     it("does NOT warn when codex `login status` reports Logged in on stderr (codex 0.144+ regression)", async () => {
-      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockExecFileSync.mockReturnValue("codex-cli 1.0.0" as unknown as Buffer);
       mockSpawnSync.mockReturnValue(spawnSyncResult(0, "", "Logged in using ChatGPT"));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
-      expect(result).toEqual({ ok: true });
+      expect(result).toEqual({ ok: true, version: "1.0.0" });
     });
 
     it("fails when a zero-status codex login probe definitively reports logged out", async () => {
-      mockExecFileSync.mockReturnValue("codex 1.0" as unknown as Buffer);
+      mockExecFileSync.mockReturnValue("codex-cli 1.0.0" as unknown as Buffer);
       mockSpawnSync.mockReturnValue(spawnSyncResult(0, "Not logged in", ""));
       const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
       expect(result).toEqual({
         ok: false,
         reason: "codex is not logged in",
         fix: "Run `codex` and complete the ChatGPT sign-in, or set OPENAI_API_KEY",
+        version: "1.0.0",
       });
     });
 
@@ -312,6 +390,50 @@ describe("install fix hints", () => {
     mockExecFileSync.mockImplementation(() => { throw err; });
     const result = await checkReviewer("codex", { type: "cli", binary: "codex" });
     expect(result.ok).toBe(false);
-    expect(result.fix).toBe("Install Codex CLI: npm install -g @openai/codex");
+    expect(result.fix).toBe("npm install -g @openai/codex@latest");
+  });
+});
+
+describe("checkClaudePlugin", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("reports an enabled plugin and its version", () => {
+    mockExecFileSync.mockReturnValue(JSON.stringify([
+      { id: "inspectrum@inspectrum", version: "0.2.1", enabled: true, scope: "user" },
+    ]));
+    expect(checkClaudePlugin()).toEqual({ ok: true, version: "0.2.1" });
+  });
+
+  it("warns with an enable command when the plugin is disabled", () => {
+    mockExecFileSync.mockReturnValue(JSON.stringify([
+      { id: "inspectrum@inspectrum", version: "0.2.1", enabled: false },
+    ]));
+    expect(checkClaudePlugin()).toMatchObject({
+      ok: true,
+      version: "0.2.1",
+      warning: expect.stringContaining("disabled"),
+      fix: "claude plugin enable inspectrum@inspectrum",
+    });
+  });
+
+  it("warns with install commands when the plugin is absent", () => {
+    mockExecFileSync.mockReturnValue("[]");
+    expect(checkClaudePlugin()).toMatchObject({
+      ok: true,
+      warning: expect.stringContaining("not installed"),
+      fix: expect.stringContaining("claude plugin marketplace add yannmenec/inspectrum"),
+    });
+  });
+
+  it.each(["not json", "{}"])("warns non-fatally for malformed plugin output: %s", (stdout) => {
+    mockExecFileSync.mockReturnValue(stdout);
+    expect(checkClaudePlugin()).toMatchObject({ ok: true, warning: expect.stringContaining("could not inspect") });
+  });
+
+  it("warns non-fatally when the Claude CLI probe fails", () => {
+    mockExecFileSync.mockImplementation(() => { throw new Error("ENOENT"); });
+    expect(checkClaudePlugin()).toMatchObject({ ok: true, warning: expect.stringContaining("could not inspect") });
   });
 });

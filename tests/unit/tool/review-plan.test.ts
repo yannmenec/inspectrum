@@ -27,7 +27,7 @@ function makeConfig(sessionsDir: string): Config {
     reviewers: {
       claude: { type: "cli", binary: "claude", args: ["-p", "--output-format", "json"] },
     },
-    limits: { plan_max_chars: 16000, report_max_chars: 8000, timeout_seconds: 60 },
+    limits: { report_max_chars: 8000, timeout_seconds: 60 },
   };
 }
 
