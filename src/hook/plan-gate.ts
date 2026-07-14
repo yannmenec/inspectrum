@@ -1,4 +1,13 @@
-import { readFileSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  realpathSync,
+} from "node:fs";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { reviewPlan } from "../tool/review-plan.js";
 import { truncatePlan } from "../reviewers/common.js";
 import { HookInputSchema, type Config, type PreToolUseDecision } from "../schemas.js";
@@ -14,6 +23,8 @@ export interface PlanGateDeps {
   stateDir?: string;
   now?: () => Date;
   deadlineMs?: number;
+  plansDir?: string;
+  planFileUid?: number;
 }
 
 /**
@@ -41,7 +52,7 @@ async function gate(rawStdin: string, config: Config, deps: PlanGateDeps): Promi
 
   let plan = input.tool_input?.plan ?? "";
   if (!plan && input.tool_input?.planFilePath) {
-    plan = readFileSync(input.tool_input.planFilePath, "utf8").slice(0, PLAN_FILE_MAX_BYTES);
+    plan = readPlanFile(input.tool_input.planFilePath, deps);
   }
   if (!plan.trim()) return failOpen("no plan found in hook input");
   plan = truncatePlan(plan);
@@ -106,6 +117,63 @@ async function gate(rawStdin: string, config: Config, deps: PlanGateDeps): Promi
   state.updated_at = now().toISOString();
   await trySave(state, deps.stateDir);
   return deny(reason);
+}
+
+function readPlanFile(planFilePath: string, deps: PlanGateDeps): string {
+  const plansDir = resolve(deps.plansDir ?? defaultPlansDir());
+  const candidate = resolve(planFilePath);
+  assertContained(plansDir, candidate);
+  if (extname(candidate).toLowerCase() !== ".md") throw new Error("plan file must have a .md extension");
+
+  const before = lstatSync(candidate);
+  if (before.isSymbolicLink() || !before.isFile()) throw new Error("plan path is not a regular file");
+  if (before.size > PLAN_FILE_MAX_BYTES) throw new Error(`plan file exceeds ${PLAN_FILE_MAX_BYTES} byte limit`);
+
+  const realPlansDir = realpathSync(plansDir);
+  const realCandidate = realpathSync(candidate);
+  assertContained(realPlansDir, realCandidate);
+
+  const fd = openSync(
+    candidate,
+    constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+  );
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) throw new Error("plan path is not a regular file");
+    if (opened.dev !== before.dev || opened.ino !== before.ino) throw new Error("plan file changed while opening");
+    if (opened.size > PLAN_FILE_MAX_BYTES) throw new Error(`plan file exceeds ${PLAN_FILE_MAX_BYTES} byte limit`);
+
+    const expectedUid = deps.planFileUid ?? process.getuid?.();
+    if (expectedUid !== undefined && opened.uid !== expectedUid) throw new Error("plan file has an unexpected owner");
+
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (true) {
+      const remaining = PLAN_FILE_MAX_BYTES - total;
+      const chunk = Buffer.allocUnsafe(Math.min(16 * 1024, remaining + 1));
+      const bytesRead = readSync(fd, chunk, 0, chunk.length, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > PLAN_FILE_MAX_BYTES) throw new Error(`plan file exceeds ${PLAN_FILE_MAX_BYTES} byte limit`);
+      chunks.push(chunk.subarray(0, bytesRead));
+    }
+    return Buffer.concat(chunks, total).toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function defaultPlansDir(): string {
+  if (process.env["CLAUDE_CONFIG_DIR"]) return resolve(process.env["CLAUDE_CONFIG_DIR"], "plans");
+  if (!process.env["HOME"]) throw new Error("HOME is not set");
+  return resolve(process.env["HOME"], ".claude", "plans");
+}
+
+function assertContained(parent: string, child: string): void {
+  const rel = relative(parent, child);
+  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error("plan file is outside the Claude plans directory");
+  }
 }
 
 function allow(systemMessage: string): string {

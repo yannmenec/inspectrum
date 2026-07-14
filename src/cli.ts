@@ -33,10 +33,10 @@ if (command === "--version" || command === "-v") {
   // Code; the gate's contract is to fail open with a JSON systemMessage.
   let out: string;
   try {
-    const { readFileSync } = await import("node:fs");
     const { loadConfig } = await import("./config.js");
     const { runPlanGate } = await import("./hook/plan-gate.js");
-    out = await runPlanGate(readFileSync(0, "utf8"), loadConfig());
+    const { readHookStdin } = await import("./hook/stdin.js");
+    out = await runPlanGate(readHookStdin(), loadConfig());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     out = JSON.stringify({ systemMessage: `inspectrum plan-gate skipped: ${msg}. Plan proceeds unreviewed.` });

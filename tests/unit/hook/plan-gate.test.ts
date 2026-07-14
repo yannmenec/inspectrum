@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runPlanGate } from "../../../src/hook/plan-gate.js";
@@ -13,6 +14,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   chmodSync(stateDir, 0o700);
   rmSync(stateDir, { recursive: true, force: true });
 });
@@ -138,8 +140,21 @@ describe("runPlanGate plan extraction", () => {
       tool_name: "ExitPlanMode",
       tool_input: { planFilePath: planFile },
     });
-    await runPlanGate(raw, config(), { reviewPlanFn, stateDir });
+    await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
     expect(reviewPlanFn.mock.calls[0]![0]).toMatchObject({ plan: "# File plan" });
+  });
+
+  it("resolves the default plans root from CLAUDE_CONFIG_DIR", async () => {
+    const claudeDir = join(stateDir, "claude-config");
+    const plansDir = join(claudeDir, "plans");
+    mkdirSync(plansDir, { recursive: true });
+    const planFile = join(plansDir, "plan.md");
+    writeFileSync(planFile, "# Configured plan");
+    vi.stubEnv("CLAUDE_CONFIG_DIR", claudeDir);
+    const reviewPlanFn = vi.fn().mockResolvedValue(reviewResult("approve"));
+    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: planFile } });
+    await runPlanGate(raw, config(), { reviewPlanFn, stateDir });
+    expect(reviewPlanFn.mock.calls[0]![0]).toMatchObject({ plan: "# Configured plan" });
   });
 
   it("fails open when neither plan nor planFilePath is usable", async () => {
@@ -153,6 +168,99 @@ describe("runPlanGate plan extraction", () => {
     const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: "/no/such/file.md" } });
     const out = await runPlanGate(raw, config(), { reviewPlanFn: vi.fn(), stateDir });
     expect(JSON.parse(out)).toMatchObject({ systemMessage: expect.stringContaining("plan-gate skipped") });
+  });
+
+  it("prefers an inline plan without touching a hostile planFilePath", async () => {
+    const reviewPlanFn = vi.fn().mockResolvedValue(reviewResult("approve"));
+    const raw = JSON.stringify({
+      tool_name: "ExitPlanMode",
+      tool_input: { plan: "# Inline", planFilePath: "/dev/zero" },
+    });
+    await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
+    expect(reviewPlanFn.mock.calls[0]![0]).toMatchObject({ plan: "# Inline" });
+  });
+
+  it.each([
+    ["outside the plans directory", () => join(stateDir, "..", "outside.md")],
+    ["a directory", () => stateDir],
+    ["a device path", () => "/dev/zero"],
+  ])("fails open for %s", async (_name, makePath) => {
+    const reviewPlanFn = vi.fn();
+    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: makePath() } });
+    const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
+    expect(JSON.parse(out)).toMatchObject({ systemMessage: expect.stringContaining("Plan proceeds unreviewed") });
+    expect(reviewPlanFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects a final symlink, including one targeting /dev/zero", async () => {
+    const link = join(stateDir, "plan.md");
+    symlinkSync("/dev/zero", link);
+    const reviewPlanFn = vi.fn();
+    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: link } });
+    const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
+    expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
+    expect(reviewPlanFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects a FIFO without blocking", async () => {
+    const fifo = join(stateDir, "plan.md");
+    execFileSync("mkfifo", [fifo]);
+    const reviewPlanFn = vi.fn();
+    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: fifo } });
+    const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
+    expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
+    expect(reviewPlanFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects a plan file above 64,000 bytes before review", async () => {
+    const planFile = join(stateDir, "large.md");
+    writeFileSync(planFile, "x".repeat(64_001));
+    const reviewPlanFn = vi.fn();
+    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: planFile } });
+    const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
+    expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
+    expect(reviewPlanFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-Markdown plan file", async () => {
+    const planFile = join(stateDir, "plan.txt");
+    writeFileSync(planFile, "# Plan");
+    const reviewPlanFn = vi.fn();
+    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: planFile } });
+    const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
+    expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
+    expect(reviewPlanFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects a file whose owner does not match the expected uid", async () => {
+    const planFile = join(stateDir, "owner.md");
+    writeFileSync(planFile, "# Plan");
+    const reviewPlanFn = vi.fn();
+    const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: planFile } });
+    const out = await runPlanGate(raw, config(), {
+      reviewPlanFn,
+      stateDir,
+      plansDir: stateDir,
+      planFileUid: (process.getuid?.() ?? 0) + 1,
+    });
+    expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
+    expect(reviewPlanFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects an inner directory symlink that escapes the plans directory", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "inspectrum-outside-"));
+    try {
+      const nested = join(stateDir, "nested");
+      writeFileSync(join(outside, "plan.md"), "# Outside");
+      symlinkSync(outside, nested);
+      const reviewPlanFn = vi.fn();
+      const raw = JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { planFilePath: join(nested, "plan.md") } });
+      const out = await runPlanGate(raw, config(), { reviewPlanFn, stateDir, plansDir: stateDir });
+      expect(JSON.parse(out).systemMessage).toContain("Plan proceeds unreviewed");
+      expect(reviewPlanFn).not.toHaveBeenCalled();
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("truncates an oversized plan before review", async () => {
