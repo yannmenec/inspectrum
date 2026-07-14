@@ -1,0 +1,297 @@
+name: Stage npm package
+
+# Future npm trusted-publisher identity (configure only after explicit approval):
+# yannmenec / inspectrum / npm-stage.yml / environment npm / stage-publish only.
+# Protect the `npm` environment with tag rules matching v* and a required reviewer.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag selected as the workflow ref (for example, v0.2.2)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: npm-stage-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate candidate without publish credentials
+    if: github.repository == 'yannmenec/inspectrum'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Require a matching stable tag event
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          WORKFLOW_REF_NAME: ${{ github.ref_name }}
+          WORKFLOW_REF_TYPE: ${{ github.ref_type }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" != "$WORKFLOW_REF_NAME" || "$WORKFLOW_REF_TYPE" != "tag" ]]; then
+            echo "Run this workflow from the same tag supplied as the tag input" >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Only stable vMAJOR.MINOR.PATCH tags are supported" >&2
+            exit 1
+          fi
+
+      - name: Check out the triggering tag
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Pin npm with staged-publishing support
+        run: |
+          npm install --global --ignore-scripts npm@11.15.0
+          test "$(npm --version)" = "11.15.0"
+
+      - name: Validate tag and synchronized versions
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"
+          tag_commit="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          if [[ "$tag_commit" != "$(git rev-parse HEAD)" || "$tag_commit" != "$WORKFLOW_SHA" ]]; then
+            echo "Tag, checkout, and workflow commit do not match" >&2
+            exit 1
+          fi
+          expected="v$(node -p "require('./package.json').version")"
+          if [[ "$RELEASE_TAG" != "$expected" ]]; then
+            echo "Requested tag $RELEASE_TAG does not match package version $expected" >&2
+            exit 1
+          fi
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+          const pkg = readJson("package.json");
+          const lock = readJson("package-lock.json");
+          const plugin = readJson(".claude-plugin/plugin.json");
+          const server = readJson("server.json");
+          const versions = new Map([
+            ["package-lock.json", lock.version],
+            ["package-lock root", lock.packages?.[""]?.version],
+            ["Claude plugin", plugin.version],
+            ["MCP Registry manifest", server.version],
+          ]);
+          if (server.name !== pkg.mcpName) {
+            throw new Error(`server.json name ${server.name} does not match package mcpName ${pkg.mcpName}`);
+          }
+          for (const [source, version] of versions) {
+            if (version !== pkg.version) {
+              throw new Error(`${source} version ${version} does not match package ${pkg.version}`);
+            }
+          }
+          NODE
+
+      - name: Version is not already published on npm
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+          const url = `https://registry.npmjs.org/${encodeURIComponent(pkg.name)}/${encodeURIComponent(pkg.version)}`;
+          const response = await fetch(url, { headers: { accept: "application/json" } });
+          if (response.status === 200) {
+            throw new Error(`${pkg.name}@${pkg.version} already exists; versions are immutable`);
+          }
+          if (response.status !== 404) {
+            throw new Error(`npm version lookup returned HTTP ${response.status}`);
+          }
+          console.log(`${pkg.name}@${pkg.version} is not published`);
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run release checks
+        run: |
+          npm run build
+          npx tsc --noEmit
+          npx eslint src/
+          npm test
+          npm run test:coverage
+          npm run test:e2e
+          npm pack --dry-run --json
+          npm run build:mcpb
+          npm run verify:mcpb
+          git diff --check
+
+      - name: Pack the exact candidate
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack
+          mapfile -t tarballs < <(find . -maxdepth 1 -type f -name 'inspectrum-*.tgz' -print)
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "npm pack did not leave exactly one tarball" >&2
+            exit 1
+          fi
+          tarball="${tarballs[0]#./}"
+          sha256sum "$tarball" > "$tarball.sha256"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke the exact candidate
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d)"
+          npm install --prefix "$smoke_dir" --ignore-scripts "./$TARBALL"
+          expected="$(node -p "require('./package.json').version")"
+          actual="$(node "$smoke_dir/node_modules/inspectrum/dist/cli.js" --version)"
+          test "$actual" = "$expected"
+          export SMOKE_DIR="$smoke_dir"
+          node --input-type=module <<'NODE'
+          import { mkdtempSync } from "node:fs";
+          import { tmpdir } from "node:os";
+          import { join, resolve } from "node:path";
+          import { pathToFileURL } from "node:url";
+
+          const modules = resolve(process.env.SMOKE_DIR, "node_modules");
+          const { Client } = await import(pathToFileURL(join(modules, "@modelcontextprotocol/sdk/dist/esm/client/index.js")));
+          const { StdioClientTransport } = await import(pathToFileURL(join(modules, "@modelcontextprotocol/sdk/dist/esm/client/stdio.js")));
+          const home = mkdtempSync(join(tmpdir(), "inspectrum-stage-smoke-"));
+          const transport = new StdioClientTransport({
+            command: process.execPath,
+            args: [join(modules, "inspectrum/dist/server.js")],
+            env: { ...process.env, HOME: home, NO_COLOR: "1" },
+          });
+          const client = new Client({ name: "npm-stage-smoke", version: "1.0.0" });
+          try {
+            await client.connect(transport);
+            const result = await client.listTools();
+            if (result.tools.length !== 1 || result.tools[0]?.name !== "review_plan") {
+              throw new Error("staged tarball must expose exactly review_plan");
+            }
+          } finally {
+            await client.close();
+          }
+          NODE
+
+      - name: Upload candidate for the protected job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-stage-candidate-${{ github.run_id }}
+          path: |
+            ${{ steps.pack.outputs.tarball }}
+            ${{ steps.pack.outputs.tarball }}.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
+
+  stage:
+    name: Stage validated tarball for 2FA review
+    needs: validate
+    if: >-
+      github.repository == 'yannmenec/inspectrum' &&
+      github.ref_type == 'tag' &&
+      github.ref_name == inputs.tag
+    runs-on: ubuntu-latest
+    environment: npm
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Set up Node and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
+          ACTIONS_ID_TOKEN_REQUEST_URL: ""
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Download validated candidate
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
+          ACTIONS_ID_TOKEN_REQUEST_URL: ""
+        with:
+          name: npm-stage-candidate-${{ github.run_id }}
+          path: candidate
+
+      - name: Pin npm without exposing the OIDC request endpoint
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
+          ACTIONS_ID_TOKEN_REQUEST_URL: ""
+        run: |
+          npm install --global --ignore-scripts npm@11.15.0
+          test "$(npm --version)" = "11.15.0"
+
+      - name: Verify the exact candidate without OIDC access
+        id: verify
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
+          ACTIONS_ID_TOKEN_REQUEST_URL: ""
+          RELEASE_TAG: ${{ inputs.tag }}
+          npm_config_ignore_scripts: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd candidate
+          sha256sum -c ./*.sha256
+          mapfile -t tarballs < <(find . -maxdepth 1 -type f -name 'inspectrum-*.tgz' -print)
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "Expected exactly one candidate tarball" >&2
+            exit 1
+          fi
+          export TARBALL="${tarballs[0]}"
+          node --input-type=module <<'NODE'
+          import { execFileSync } from "node:child_process";
+
+          const raw = execFileSync("tar", ["-xOf", process.env.TARBALL, "package/package.json"], { encoding: "utf8" });
+          const pkg = JSON.parse(raw);
+          const expectedTag = `v${pkg.version}`;
+          if (process.env.RELEASE_TAG !== expectedTag) {
+            throw new Error(`tarball version ${pkg.version} does not match ${process.env.RELEASE_TAG}`);
+          }
+          if (pkg.name !== "inspectrum") {
+            throw new Error(`unexpected package name ${pkg.name}`);
+          }
+          if (JSON.stringify(pkg.publishConfig) !== JSON.stringify({ access: "public" })) {
+            throw new Error("tarball publishConfig must be exactly { access: public }");
+          }
+          const url = `https://registry.npmjs.org/${encodeURIComponent(pkg.name)}/${encodeURIComponent(pkg.version)}`;
+          const response = await fetch(url, { headers: { accept: "application/json" } });
+          if (response.status === 200) {
+            throw new Error(`${pkg.name}@${pkg.version} was published after validation`);
+          }
+          if (response.status !== 404) {
+            throw new Error(`npm version recheck returned HTTP ${response.status}`);
+          }
+          NODE
+          echo "tarball=${TARBALL#./}" >> "$GITHUB_OUTPUT"
+
+      - name: Stage the verified candidate
+        env:
+          TARBALL: candidate/${{ steps.verify.outputs.tarball }}
+          npm_config_ignore_scripts: "true"
+        shell: bash -euo pipefail {0}
+        run: npm stage publish "$TARBALL" --access public --json
