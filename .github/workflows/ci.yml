@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit production dependencies
+        if: matrix.node == '20'
+        run: npm audit --omit=dev
+
       - name: Typecheck
         run: npx tsc --noEmit
 
@@ -39,3 +43,19 @@ jobs:
 
       - name: Test (e2e MCP stdio)
         run: npm run test:e2e
+
+      - name: Build MCPB bundle (first stage)
+        if: matrix.node == '20'
+        run: |
+          npm run build:mcpb
+          cp dist-mcpb/inspectrum-*.mcpb "$RUNNER_TEMP/inspectrum-first.mcpb"
+
+      - name: Rebuild MCPB bundle deterministically
+        if: matrix.node == '20'
+        run: |
+          npm run build:mcpb
+          cmp -s "$RUNNER_TEMP/inspectrum-first.mcpb" dist-mcpb/inspectrum-*.mcpb
+
+      - name: Validate, inspect, and smoke MCPB bundle
+        if: matrix.node == '20'
+        run: npm run verify:mcpb

@@ -17,7 +17,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "build:mcpb": "mcpb pack mcpb dist-mcpb/inspectrum-$npm_package_version.mcpb",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "verify:mcpb": "node scripts/verify-mcpb.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build && vitest run tests/e2e",
@@ -32,10 +33,23 @@
     "claude",
     "codex",
     "gemini",
-    "multi-llm"
+    "multi-llm",
+    "claude-code",
+    "codex-cli",
+    "plan-mode",
+    "coding-agent"
   ],
   "author": "Yann Menec",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yannmenec/inspectrum.git"
+  },
+  "homepage": "https://github.com/yannmenec/inspectrum#readme",
+  "bugs": {
+    "url": "https://github.com/yannmenec/inspectrum/issues"
+  },
+  "mcpName": "io.github.yannmenec/inspectrum",
   "engines": {
     "node": ">=20"
   },

@@ -21,9 +21,9 @@ The problem isn't that your agent plans badly — it's that **nobody checks the 
 
 **inspectrum wires a rival LLM into your agent's plan mode.** When Claude Code finishes a plan, Codex (GPT) reviews it *before* the approval dialog reaches you. Findings bounce the plan back to Claude for revision — so the plan you finally approve has already survived a second opinion. (And if the reviewer can't run, the plan passes through with a warning, never blocked.)
 
-## ⚡ 60 seconds to your first gated plan
+## Quick start
 
-You need [Node 20+](https://nodejs.org), Claude Code, and the Codex CLI with a [ChatGPT subscription](https://chatgpt.com/pricing) (no API key):
+You need [Node 20+](https://nodejs.org), Claude Code, and Codex CLI >= 0.99.0 authenticated with a [ChatGPT subscription](https://chatgpt.com/pricing) (no API key):
 
 ```bash
 claude plugin marketplace add yannmenec/inspectrum
@@ -59,8 +59,8 @@ switch to Bypass Permissions or Full Access.
 Steps:
 1. Run `node --version`. If < 20, stop and tell me to install Node 20+
    from https://nodejs.org first.
-2. Run `codex --version`. If "command not found", run
-   `npm install -g @openai/codex` and verify again.
+2. Run `codex --version`. If it is missing or older than 0.99.0, run
+   `npm install -g @openai/codex@latest` and verify again.
 3. Run `claude plugin marketplace add yannmenec/inspectrum`, then
    `claude plugin install inspectrum@inspectrum`.
 4. Run `claude mcp add --transport stdio --scope user inspectrum -- npx -y inspectrum@latest`
@@ -116,7 +116,7 @@ Built to be **boring and safe**:
 - **Plans are leverage.** A flaw caught at plan time costs a paragraph. The same flaw caught at PR time costs a rewrite.
 - **Self-review is an echo chamber.** The model that wrote the plan is the least qualified to find its blind spots.
 - **Claude and GPT disagree usefully.** Different training, different failure modes, different objections. That disagreement is the product.
-- **You already pay for both.** The gate runs on your existing ChatGPT subscription — no API key, no per-token bill.
+- **Use an existing subscription.** No separate API bill when using your ChatGPT subscription; reviews consume your existing Codex subscription allowance. API-key backends are billed by their provider.
 
 ## What's in the box
 
@@ -134,14 +134,14 @@ Built to be **boring and safe**:
 | Your agent | Your reviewer | Setup |
 |------------|--------------|-------|
 | **Claude Code** | Codex (GPT) | Plugin — 2 commands above |
-| **Codex Desktop** | Claude | `codex mcp add inspectrum -- npx -y inspectrum@latest` + config below |
-| **Claude Desktop** | Codex (GPT) | Download [`inspectrum.mcpb`](https://github.com/yannmenec/inspectrum/releases/latest/download/inspectrum.mcpb), open, confirm |
+| **Codex app / CLI** | Claude | `codex mcp add inspectrum -- npx -y inspectrum@latest` + config below |
+| **Claude Desktop** | Codex (GPT) | The v0.2.0 MCPB is incomplete; use npm/stdio for now. A repaired macOS-only v0.2.1 bundle is prepared but not yet published. |
 | **Cursor** | Codex (GPT) | [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.png)](https://cursor.com/en/install-mcp?name=inspectrum&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImluc3BlY3RydW1AbGF0ZXN0Il19) |
 
 <details>
-<summary><b>Codex Desktop setup</b> — use Claude as your reviewer</summary>
+<summary><b>Codex app / CLI setup</b> — use Claude as your reviewer</summary>
 
-Paste this into Codex Desktop:
+Paste this into the Codex app or CLI:
 
 ````text
 Set up inspectrum so I can review my plans with Claude. Use normal
@@ -236,9 +236,8 @@ Headless or CI host that can't run an interactive login? Pass the peer API key t
 claude mcp add --transport stdio --scope user inspectrum -- npx -y inspectrum@latest   # Claude Code
 codex mcp add inspectrum -- npx -y inspectrum@latest                                   # Codex
 
-# Manual hook install (no plugin) — add to ~/.claude/settings.json:
-#   "hooks": { "PreToolUse": [ { "matcher": "ExitPlanMode", "hooks":
-#     [ { "type": "command", "command": "npx -y inspectrum@latest plan-gate", "timeout": 600 } ] } ] }
+# The automatic plan gate must use the plugin's pinned fail-open shim; do not
+# register plan-gate through a mutable npm tag.
 
 # Verify everything:
 npx -y inspectrum@latest doctor
@@ -251,7 +250,7 @@ npx -y inspectrum@latest doctor
 
 - Session logs live at `~/.inspectrum/sessions/<timestamp>__<id>/` and contain your full plan plus a Markdown record of each reviewer's verdict and findings. Directory perms are **0700 on POSIX**. Logs written by pre-0.1.0 versions keep their original perms — retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
 - **Never paste secrets into a plan or context.** The plan is written to the local session log, and both the plan and context are sent to every active reviewer.
-- Cloud routes: **claude** → Anthropic (OAuth keychain or `ANTHROPIC_API_KEY`); **codex** → OpenAI (ChatGPT login or `OPENAI_API_KEY`); **gemini** → Google (personal-account CLI login or `GEMINI_API_KEY`); **openrouter** → openrouter.ai; **ollama** → localhost only, zero egress unless you change `endpoint`.
+- Cloud routes: **claude** → Anthropic (OAuth keychain or `ANTHROPIC_API_KEY`); **codex** → OpenAI (ChatGPT login or `OPENAI_API_KEY`); **gemini** → Google (personal-account CLI login or `GEMINI_API_KEY`); **openrouter** → openrouter.ai; **kimi** → Moonshot AI; **qwen** → Alibaba Cloud; **ollama** → localhost only, zero egress unless you change `endpoint`.
 - Codex is invoked as `codex exec --ephemeral --skip-git-repo-check -s read-only …` in a throwaway temp directory — the sandbox is pinned read-only, sandbox-weakening and cwd-override args from your config are stripped, and codex persists no session files.
 
 </details>
@@ -268,7 +267,7 @@ The gate fails open with a visible warning and your plan proceeds untouched. An 
 No. The gate can only *delay* the approval dialog (while Claude revises) — it can never click it. You see and approve every plan that ships.
 
 **Do I need API keys?**
-No. Codex reviews run on your ChatGPT Plus/Pro subscription; Claude reviews on your Claude Pro/Max subscription. API keys are supported for headless/CI setups.
+Not for subscription-backed Codex or Claude CLI logins. Reviews consume the allowance of the existing subscription. API keys are supported for headless/CI setups and are billed by their provider.
 
 **My prompt/plan is sensitive — where does it go?**
 To the reviewer(s) you configured, and to a local session log under `~/.inspectrum/sessions/` (0700). Nothing else. Use ollama for a fully local, zero-egress reviewer.
