@@ -92,6 +92,11 @@ describe("checkReviewer — CLI", () => {
       ["codex-cli 0.99.0", "0.99.0"],
       ["codex-cli 0.144.0-alpha.4", "0.144.0-alpha.4"],
       ["codex 1.0.0", "1.0.0"],
+      // 0.100.0 > 0.99.0 numerically but "0.100.0" < "0.99.0" lexicographically:
+      // locks the per-component compare against a regression to a string compare.
+      ["codex-cli 0.100.0", "0.100.0"],
+      ["codex-cli 0.144.2\nUpdate available: 0.145.0", "0.144.2"],
+      ["\u001b[32mcodex-cli 0.144.2\u001b[0m", "0.144.2"],
     ])("accepts %s and returns the parsed version", async (stdout, version) => {
       mockExecFileSync.mockReturnValue(stdout);
       await expect(checkReviewer("codex", { type: "cli", binary: "codex" })).resolves.toEqual({
@@ -117,6 +122,17 @@ describe("checkReviewer — CLI", () => {
         ok: false,
         reason: expect.stringContaining("requires Codex CLI >= 0.99.0"),
       });
+    });
+
+    // Regression: an aliased Codex reviewer with no explicit `binary` used to probe
+    // the reviewer id ("codex-high"), so doctor reported ENOENT and told the user to
+    // reinstall a Codex that was installed and healthy. The review path in common.ts
+    // spawns the backend binary ("codex"); health must probe the same one.
+    it("probes the backend binary for an aliased Codex reviewer with no binary override", async () => {
+      mockExecFileSync.mockReturnValue("codex-cli 0.144.2");
+      const result = await checkReviewer("codex-high", { type: "cli", backend: "codex", effort: "high" });
+      expect(mockExecFileSync).toHaveBeenCalledWith("codex", ["--version"], expect.any(Object));
+      expect(result).toMatchObject({ ok: true, version: "0.144.2" });
     });
 
     it("rejects an unparseable Codex version", async () => {
