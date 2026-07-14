@@ -119,9 +119,9 @@ doesn't accept JSONC comments — copy the JSON shape from
 [`examples/cursor/.cursor/mcp.json`](examples/cursor/.cursor/mcp.json) and
 swap `command/args` to `node` + `["<abs path>/dist/server.js"]` by hand.
 
-If you're reviewing plans from a Desktop host (Claude Code, Codex app,
-Cursor), see the [Cross-LLM setup](README.md#cross-llm-setup) section in
-README for how to pass peer-LLM API keys through the host's MCP `env` block.
+If you're reviewing plans from another local MCP host, see the
+[Tuning](README.md#tuning) section in README for how to pass peer-LLM API keys
+through the host's MCP `env` block.
 Without that, `review_plan` will fail with auth errors even though
 `inspectrum doctor` reports ✅ for binary presence.
 
@@ -132,7 +132,7 @@ Kimi and Qwen wrappers ship in v0.1.0 but are **experimental**:
 - The CLI flag shapes (`-m <model> -p <systemPrompt>` over stdin) are
   *assumed* based on similar gemini-family CLIs.
 - They have not been smoke-tested against real Moonshot or DashScope CLIs.
-- Per [ADR-0001](_decisions/ADR-0001-defer-integration-tests.md), promoting
+- Per [ADR-0001](https://github.com/yannmenec/inspectrum/blob/main/_decisions/ADR-0001-defer-integration-tests.md), promoting
   any reviewer backend to "default" requires a real-CLI smoke test in
   `tests/integration/` (reintroduced post-v0.2).
 
@@ -217,7 +217,7 @@ if (backend === "kimi") return new KimiReviewer(id, config);
 ```
 
 Also add your backend to the `backend` enum in
-[src/schemas.ts](src/schemas.ts) `ReviewerConfigSchema`. Both `cli` and
+[src/schemas.ts](https://github.com/yannmenec/inspectrum/blob/main/src/schemas.ts) `ReviewerConfigSchema`. Both `cli` and
 `http` backends share the enum.
 
 ### Step 4 — Add a fix hint in health.ts
@@ -285,7 +285,7 @@ brings coverage below the gate, write additional tests before merging.
 
 ## Architecture invariants
 
-See [AGENTS.md](./AGENTS.md) §Architecture invariants for the full list.
+See [AGENTS.md](https://github.com/yannmenec/inspectrum/blob/main/AGENTS.md) §Architecture invariants for the full list.
 The most critical ones for contributors:
 
 - Exactly one MCP tool: `review_plan`. A second tool requires an ADR under
