@@ -157,6 +157,8 @@ describe("distribution metadata", () => {
     expect(packBlock).toContain("contents: read");
     expect(packBlock).not.toContain("contents: write");
     expect(packBlock).toContain("persist-credentials: false");
+    expect(packBlock).toContain("package-manager-cache: false");
+    expect(packBlock).not.toContain('cache: "npm"');
     expect(packBlock).not.toContain("softprops/action-gh-release@");
     expect(releaseBlock).toContain("needs: pack");
     expect(releaseBlock).toContain("contents: write");
