@@ -28,6 +28,16 @@ describe("distribution metadata", () => {
     ]));
   });
 
+  it("keeps vulnerable release and MCPB dependency versions excluded", () => {
+    expect(pkg.dependencies["@modelcontextprotocol/sdk"]).toBe("^1.30.0");
+    expect(lock.packages["node_modules/@modelcontextprotocol/sdk"].version).toBe("1.30.0");
+    expect(lock.packages["node_modules/@hono/node-server"].version).toBe("2.0.12");
+    expect(lock.packages["node_modules/body-parser"].version).toBe("2.3.0");
+    expect(lock.packages["node_modules/fast-uri"].version).toBe("3.1.4");
+    expect(pkg.overrides).toEqual({ "external-editor": { tmp: "0.2.7" } });
+    expect(lock.packages["node_modules/tmp"].version).toBe("0.2.7");
+  });
+
   it("derives every MCPB versioned field from package.json", () => {
     const manifest = createMcpbManifest(pkg);
     expect(manifest).toMatchObject({
