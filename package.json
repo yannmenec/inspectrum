@@ -61,7 +61,7 @@
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -76,5 +76,10 @@
     "tsx": "^4.20.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
+  },
+  "overrides": {
+    "external-editor": {
+      "tmp": "0.2.7"
+    }
   }
 }
