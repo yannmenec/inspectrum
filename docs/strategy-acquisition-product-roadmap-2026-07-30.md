@@ -43,8 +43,8 @@ suivante. Sans activation, une campagne d'étoiles produit un pic sans usage.
 | Dépôt public | `yannmenec/inspectrum`, branche principale à la version 0.2.1 |
 | Paquet npm public | 0.2.1 |
 | Dernière release GitHub publique | 0.2.1, publiée le 14 juillet 2026 |
-| Branche locale | `chore/growth-combined-validation`, candidat consolidé issu des onze commits initiaux |
-| Candidat local | 0.2.2, avec manifeste MCP Registry, preuves synthétiques, guide, actifs de marque, dépendances corrigées, kit de soumission et plugin Codex |
+| Branche locale | `chore/growth-combined-validation`, candidat consolidé et corrigé après revues réelles |
+| Candidat local | 0.2.2, avec manifeste MCP Registry, preuves synthétiques, guide, actifs de marque, dépendances corrigées, kit de soumission, plugin Codex et compatibilité Claude Code 2.1.145 |
 | Plugin Claude Code actif sur cette machine | 0.2.0 |
 | Serveur MCP configuré dans Codex sur cette machine | 0.1.5 |
 | Binaire local/global observé | 0.2.2 |
@@ -145,42 +145,55 @@ sur cette machine : 1 test sur 1 réussi avec Codex connecté. Les tests
 déterministes couvrent également la boucle refus, révision, approbation avec un
 faux reviewer.
 
-La boucle complète Claude Code réel vers Codex réel n'a pas pu être rejouée :
-l'appel headless Claude retourne HTTP 401, car le jeton OAuth a été révoqué.
-Il ne faut donc pas publier de nouvelle preuve de bout en bout avant
-réauthentification.
+L'authentification Claude a été renouvelée le 30 juillet. Un appel headless
+réel a ensuite réussi. La boucle du gate a également réussi dans son harnais de
+bout en bout, mais ce harnais utilise encore un faux reviewer Codex
+déterministe. Le reviewer Codex réel et le gate sont donc prouvés séparément ;
+la boucle complète Claude Code réel vers Codex réel reste à rejouer avant d'en
+faire une preuve publique.
 
 #### Codex vers Claude
 
-Le sens inverse n'est pas un produit fini :
+Le sens inverse fonctionne désormais à la demande, mais n'est pas encore un
+gate automatique :
 
 - Codex peut enregistrer le serveur MCP et appeler `review_plan` ;
-- l'entrée peut demander explicitement `reviewers: ["claude"]` ;
-- un adaptateur Claude existe ;
-- il n'existe toutefois ni plugin Codex, ni skill dédiée, ni gate automatique
-  de fin de plan ;
+- le plugin Codex candidat et sa skill demandent explicitement
+  `reviewers: ["claude"]` et désactivent le juge ;
+- l'adaptateur Claude a été exercé avec Claude Code 2.1.145 ;
+- il n'existe toutefois pas encore de gate automatique de fin de plan côté
+  Codex ;
 - la configuration par défaut demande Codex, donc un appel sans surcharge
   ferait relire Codex par un second Codex ;
-- l'adaptateur Claude n'a pas de smoke réel dans le dépôt.
+- le smoke Claude réel reste manuel et optionnel, pas un contrôle continu.
 
-Un appel MCP réel du paquet public 0.2.1 vers Claude a été exécuté le
-30 juillet. Le serveur a bien exposé l'unique outil `review_plan`, puis la revue
-a échoué : le jeton OAuth Claude était révoqué. `claude auth status` annonçait
-pourtant une connexion valide. Le contrôle de santé actuel d'Inspectrum ne
-détecte donc pas cette panne.
+Le premier appel réel après réauthentification a découvert une incompatibilité
+avec l'enveloppe de Claude Code 2.1.145 : Claude produisait bien la revue dans
+`structured_output`, mais Inspectrum lisait encore le texte de `result`. Un
+correctif testé accepte désormais la sortie structurée et conserve le repli
+sur l'ancien champ, y compris lorsque `structured_output` vaut explicitement
+`null`.
+
+Après ce correctif, un appel réel Codex vers le serveur MCP local, avec Claude
+comme seul modèle chargé de la revue, a réussi. Il a produit un verdict
+`reject`, huit constats et un plan révisé, puis a écrit la session
+`2026-07-30T09-45-30__caf66cac`. La revue a pris environ 90 secondes. Cela
+prouve le sens Codex vers Claude à la demande ; cela ne prouve pas encore un
+hook automatique en fin de plan.
 
 #### Modèles de secours sur la machine
 
 | Reviewer | Binaire | Appel réel | Conclusion |
 |---|---|---|---|
 | Codex | Présent | Réussi | Disponible |
-| Claude | Présent | HTTP 401, OAuth révoqué | Indisponible tant que la session n'est pas renouvelée |
+| Claude | Présent | Réussi après réauthentification | Disponible au moment du contrôle |
 | Gemini | Présent | Échec d'authentification, code 41 | Indisponible tant qu'une méthode d'authentification n'est pas configurée |
 | Ollama | Absent | Non exécuté | Aucun fallback local |
 
-Dans l'état observé, il n'existe donc qu'un reviewer utilisable : Codex. Un
-second processus Codex sur le même compte ne contournerait pas un quota de
-compte épuisé.
+Dans l'état observé, deux reviewers sont utilisables : Codex et Claude. Cette
+disponibilité reste ponctuelle, car aucun des deux fournisseurs ne garantit le
+quota futur. Un second processus du même fournisseur ne contournerait pas un
+quota de compte épuisé.
 
 ### 1.5 Lacunes produit prioritaires
 
@@ -202,9 +215,10 @@ compte épuisé.
    configuré n'est pas transmis à la CLI Claude.
 6. **Délai global sans annulation.** Le gate peut laisser passer après son
    délai global alors que le sous-processus continue et consomme du quota.
-7. **Preuves asymétriques.** Codex a un smoke réel optionnel ; Claude est testé
-   avec mocks seulement ; le test stdio énumère l'outil sans effectuer une
-   revue réelle.
+7. **Preuves réelles encore manuelles.** Codex et Claude ont chacun réussi un
+   appel réel, et le serveur stdio a réellement exécuté Claude. Ces preuves ne
+   sont pas encore des contrôles continus et la boucle complète
+   Claude-Code-vers-Codex réel reste à rejouer.
 
 ## 2. Stratégie d'acquisition
 
@@ -656,10 +670,13 @@ fallback : dupliquer deux systèmes de routage créerait une dette évitable.
 
 | Session | État au 30 juillet 2026 | Preuve ou blocage |
 |---|---|---|
-| S1 | Code et paquets prêts ; preuve Claude bloquée | zéro vulnérabilité, contrôles verts, mais reconnexion Claude arrêtée sur un défi visuel |
+| S1 | Candidat technique prêt ; publication non réalisée | zéro vulnérabilité, contrôles verts, Claude réauthentifié, sens Codex vers Claude réel réussi ; boucle complète Claude Code vers Codex réel encore non publiée |
 | S2 | Terminée localement | kit de soumission et garde public validés ; aucune soumission avant npm 0.2.2 |
-| S3 | Terminée localement | plugin Codex, cinq cas positifs et trois négatifs, version alignée sur 0.2.2 |
-| S4 à S12 | Non commencées | dépendent de la preuve réelle et de la publication de S1, puis des apprentissages utilisateurs |
+| S3 | Terminée localement | plugin Codex, cinq cas positifs et trois négatifs, version alignée sur 0.2.2, parcours MCP vers Claude prouvé |
+| S4-S5 | Non commencées | dépendent de la publication et d'utilisateurs réels |
+| S6 | Proposition terminée, non approuvée | décision d'architecture isolée sur `agent/propose-review-resilience` |
+| S7 | Partiellement commencée | compatibilité de sortie Claude corrigée ; isolation, diagnostic et smoke automatisé restent à faire |
+| S8-S12 | Non commencées | dépendent de l'approbation de la décision et des apprentissages utilisateurs |
 
 ## 5. Risques et décisions à ne pas masquer
 
@@ -680,16 +697,19 @@ fallback : dupliquer deux systèmes de routage créerait une dette évitable.
 
 ## 6. Prochaine action recommandée
 
-Terminer S1 : résoudre le défi de reconnexion Claude, rejouer l'appel headless,
-le gate réel et la revue Codex vers Claude, puis ouvrir la pull request du
-candidat consolidé. Après fusion et contrôles GitHub, publier npm 0.2.2 avant
-la release GitHub et le registre MCP.
+Terminer S1 sans publier un diff monolithique : découper le candidat en pull
+requests cohérentes, intégrer d'abord le correctif Claude et la chaîne de
+release, puis le plugin, les preuves et la documentation. Après fusion et
+contrôles GitHub, réinstaller la version candidate depuis un environnement
+propre et rejouer la boucle Claude Code vers Codex réel. Publier npm 0.2.2
+seulement après ce dernier contrôle, avant la release GitHub et le registre
+MCP.
 
 Prompt de reprise :
 
-> Reprends Inspectrum S1 sur `chore/growth-combined-validation`. Termine
-> l'authentification Claude, exécute l'appel headless, le gate réel et le
-> parcours Codex vers Claude. Si ces preuves passent, vérifie une dernière fois
-> le garde public, les paquets et le diff, puis prépare la pull request 0.2.2.
-> N'avance jamais vers le registre MCP avant que npm 0.2.2 soit réellement
-> public.
+> Reprends Inspectrum S1 sur `chore/growth-combined-validation`. Découpe le
+> candidat validé en pull requests cohérentes et courtes, en commençant par le
+> correctif Claude et la chaîne de release 0.2.2. Après fusion, réinstalle le
+> candidat dans un environnement propre et rejoue Claude Code vers Codex réel.
+> Ne publie npm 0.2.2 qu'après ce contrôle, et n'avance jamais vers le registre
+> MCP avant que cette version npm soit réellement publique.
