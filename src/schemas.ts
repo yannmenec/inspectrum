@@ -70,6 +70,7 @@ export const ClaudeEnvelopeSchema = z.object({
   type: z.string(),
   is_error: z.boolean(),
   result: z.string(),
+  structured_output: z.unknown().optional(),
 });
 
 export const ClaudePluginListSchema = z.array(z.looseObject({
