@@ -40,11 +40,11 @@ suivante. Sans activation, une campagne d'étoiles produit un pic sans usage.
 
 | Élément | État vérifié |
 |---|---|
-| Dépôt public | `yannmenec/inspectrum`, branche principale à la version 0.2.1 |
+| Dépôt public | `yannmenec/inspectrum`, branche principale au candidat 0.2.2 (`fc2edae`) |
 | Paquet npm public | 0.2.1 |
 | Dernière release GitHub publique | 0.2.1, publiée le 14 juillet 2026 |
-| Branche locale | `chore/growth-combined-validation`, candidat consolidé et corrigé après revues réelles |
-| Candidat local | 0.2.2, avec manifeste MCP Registry, preuves synthétiques, guide, actifs de marque, dépendances corrigées, kit de soumission, plugin Codex et compatibilité Claude Code 2.1.145 |
+| Branche locale | `chore/growth-combined-validation`, synthèse et point de reprise ; le candidat canonique est sur `origin/main` |
+| Candidat sur `main` | 0.2.2, avec manifeste MCP Registry, preuves réelles, guide, actifs de marque, dépendances corrigées, kit de soumission, plugin Codex et compatibilité Claude Code 2.1.145 |
 | Plugin Claude Code actif sur cette machine | 0.2.0 |
 | Serveur MCP configuré dans Codex sur cette machine | 0.1.5 |
 | Binaire local/global observé | 0.2.2 |
@@ -53,11 +53,11 @@ Cette dérive de versions est le principal risque d'activation. Un utilisateur
 qui reproduit l'état actuel peut croire tester la dernière version alors que le
 hook, le serveur MCP et le binaire exécutent trois versions différentes.
 
-Le candidat local contient déjà une grande partie du travail de préparation à
+La branche principale contient déjà la préparation à
 la croissance : un meilleur README, un benchmark synthétique publié, des
 images, un manifeste `server.json`, des tests de distribution et un pipeline de
-release plus sûr. Ce travail n'a pas encore d'effet public tant qu'il n'est ni
-fusionné, ni publié, ni réinstallé depuis une source publique.
+release plus sûr. Ce travail n'a pas encore d'effet d'activation tant que
+`inspectrum@0.2.2` n'est pas publié puis réinstallé depuis la source publique.
 
 ### 1.2 Visibilité et usage observables
 
@@ -145,12 +145,13 @@ sur cette machine : 1 test sur 1 réussi avec Codex connecté. Les tests
 déterministes couvrent également la boucle refus, révision, approbation avec un
 faux reviewer.
 
-L'authentification Claude a été renouvelée le 30 juillet. Un appel headless
-réel a ensuite réussi. La boucle du gate a également réussi dans son harnais de
-bout en bout, mais ce harnais utilise encore un faux reviewer Codex
-déterministe. Le reviewer Codex réel et le gate sont donc prouvés séparément ;
-la boucle complète Claude Code réel vers Codex réel reste à rejouer avant d'en
-faire une preuve publique.
+L'authentification Claude a été renouvelée le 30 juillet. La boucle complète
+Claude Code réel vers le client Codex réel a ensuite réussi. Un passage a
+produit une demande de révision (`abed773a`), puis une approbation après
+correction (`b100cddc`). Le harnais refuse désormais un succès si le gate s'est
+contenté de laisser passer après panne : il exige un journal récent, le marqueur
+unique du plan, un artefact de revue non vide et la provenance de l'exécutable
+Codex configuré.
 
 #### Codex vers Claude
 
@@ -174,12 +175,15 @@ correctif testé accepte désormais la sortie structurée et conserve le repli
 sur l'ancien champ, y compris lorsque `structured_output` vaut explicitement
 `null`.
 
-Après ce correctif, un appel réel Codex vers le serveur MCP local, avec Claude
-comme seul modèle chargé de la revue, a réussi. Il a produit un verdict
-`reject`, huit constats et un plan révisé, puis a écrit la session
-`2026-07-30T09-45-30__caf66cac`. La revue a pris environ 90 secondes. Cela
-prouve le sens Codex vers Claude à la demande ; cela ne prouve pas encore un
-hook automatique en fin de plan.
+Après ce correctif, plusieurs appels réels vers le serveur MCP local, avec
+Claude comme seul modèle chargé de la revue, ont réussi. La preuve la plus
+récente initiée par Codex a écrit la session
+`2026-07-30T13-04-26__892c767f`, verdict `revise`, avec deux constats majeurs,
+un mineur et un détail. Cela prouve le sens Codex vers Claude à la demande.
+Le parcours non interactif a toutefois nécessité une autorisation globale
+Codex : il valide le transport et le routage, mais ne constitue pas un mode
+headless sûr à recommander. Un refus d'autorisation intervient avant
+Inspectrum et ne peut donc pas déclencher son fallback.
 
 #### Modèles de secours sur la machine
 
@@ -215,10 +219,13 @@ quota de compte épuisé.
    configuré n'est pas transmis à la CLI Claude.
 6. **Délai global sans annulation.** Le gate peut laisser passer après son
    délai global alors que le sous-processus continue et consomme du quota.
-7. **Preuves réelles encore manuelles.** Codex et Claude ont chacun réussi un
-   appel réel, et le serveur stdio a réellement exécuté Claude. Ces preuves ne
-   sont pas encore des contrôles continus et la boucle complète
-   Claude-Code-vers-Codex réel reste à rejouer.
+7. **Preuves réelles encore manuelles.** Les deux directions ont réussi avec
+   les vrais clients et la boucle Claude Code vers Codex est maintenant
+   attribuable. Ces preuves restent optionnelles, coûteuses et absentes du
+   contrôle continu.
+8. **Autorisation de l'hôte hors du serveur.** Codex peut refuser l'appel MCP
+   avant que le serveur démarre. Ce cas doit être distingué d'un refus du
+   reviewer et ne doit jamais être présenté comme une revue réalisée.
 
 ## 2. Stratégie d'acquisition
 
@@ -670,11 +677,11 @@ fallback : dupliquer deux systèmes de routage créerait une dette évitable.
 
 | Session | État au 30 juillet 2026 | Preuve ou blocage |
 |---|---|---|
-| S1 | Candidat technique prêt ; publication non réalisée | zéro vulnérabilité, contrôles verts, Claude réauthentifié, sens Codex vers Claude réel réussi ; boucle complète Claude Code vers Codex réel encore non publiée |
+| S1 | Candidat technique prêt sur `main` ; publication non réalisée | `fc2edae`, zéro vulnérabilité, 461 tests réussis et 1 optionnel ignoré, validations des paquets et plugins vertes, boucle réelle Claude Code vers Codex et sens inverse à la demande prouvés |
 | S2 | Terminée localement | kit de soumission et garde public validés ; aucune soumission avant npm 0.2.2 |
 | S3 | Terminée localement | plugin Codex, cinq cas positifs et trois négatifs, version alignée sur 0.2.2, parcours MCP vers Claude prouvé |
 | S4-S5 | Non commencées | dépendent de la publication et d'utilisateurs réels |
-| S6 | Proposition terminée, non approuvée | décision d'architecture isolée sur `agent/propose-review-resilience` |
+| S6 | Proposition terminée, non approuvée | pull request brouillon #41 sur `agent/propose-review-resilience-v2` ; ajouter la frontière d'autorisation de l'hôte avant approbation |
 | S7 | Partiellement commencée | compatibilité de sortie Claude corrigée ; isolation, diagnostic et smoke automatisé restent à faire |
 | S8-S12 | Non commencées | dépendent de l'approbation de la décision et des apprentissages utilisateurs |
 
@@ -697,19 +704,21 @@ fallback : dupliquer deux systèmes de routage créerait une dette évitable.
 
 ## 6. Prochaine action recommandée
 
-Terminer S1 sans publier un diff monolithique : découper le candidat en pull
-requests cohérentes, intégrer d'abord le correctif Claude et la chaîne de
-release, puis le plugin, les preuves et la documentation. Après fusion et
-contrôles GitHub, réinstaller la version candidate depuis un environnement
-propre et rejouer la boucle Claude Code vers Codex réel. Publier npm 0.2.2
-seulement après ce dernier contrôle, avant la release GitHub et le registre
-MCP.
+Obtenir l'autorisation explicite de publication, puis terminer S1 depuis le
+`main` propre `fc2edae` : créer et protéger l'environnement GitHub `npm`,
+configurer la relation de confiance npm, mettre le paquet exact en attente,
+le contrôler, puis le promouvoir. Publier ensuite la release GitHub et son
+bundle, le MCP Registry, la marketplace communautaire Claude, puis réinstaller
+les plugins publics Claude et Codex. La configuration locale Codex pointe encore
+sur 0.1.5 et le plugin Claude sur 0.2.0 : ne pas les utiliser comme preuve 0.2.2.
 
 Prompt de reprise :
 
-> Reprends Inspectrum S1 sur `chore/growth-combined-validation`. Découpe le
-> candidat validé en pull requests cohérentes et courtes, en commençant par le
-> correctif Claude et la chaîne de release 0.2.2. Après fusion, réinstalle le
-> candidat dans un environnement propre et rejoue Claude Code vers Codex réel.
-> Ne publie npm 0.2.2 qu'après ce contrôle, et n'avance jamais vers le registre
-> MCP avant que cette version npm soit réellement publique.
+> Reprends Inspectrum S1 depuis `origin/main` au commit `fc2edae`. Le candidat
+> 0.2.2, les deux directions de revue et les paquets sont validés. Vérifie
+> l'autorisation explicite de Yann, crée l'environnement GitHub `npm`, configure
+> la publication npm de confiance, puis exécute le workflow de mise en attente.
+> Ne promeus le paquet qu'après contrôle de l'archive exacte et n'avance jamais
+> vers la release publique ou le registre MCP avant que npm 0.2.2 soit réellement
+> public. Après publication, remplace les installations locales 0.1.5 et 0.2.0
+> et refais les preuves installées.
