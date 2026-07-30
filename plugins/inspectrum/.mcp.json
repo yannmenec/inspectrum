@@ -1,8 +1,6 @@
 {
-  "mcpServers": {
-    "inspectrum": {
-      "command": "npx",
-      "args": ["-y", "inspectrum@0.2.2"]
-    }
+  "inspectrum": {
+    "command": "npx",
+    "args": ["-y", "inspectrum@0.2.2"]
   }
 }

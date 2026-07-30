@@ -47,8 +47,10 @@ describe("Codex plugin positive contracts", () => {
   });
 
   it("pins the bundled MCP server to the candidate package version", () => {
-    const mcp = readJson(resolve(pluginRoot, ".mcp.json"));
-    const servers = mcp.mcpServers as Record<string, Record<string, unknown>>;
+    const servers = readJson(resolve(pluginRoot, ".mcp.json")) as Record<
+      string,
+      Record<string, unknown>
+    >;
 
     expect(servers.inspectrum).toEqual({
       command: "npx",
@@ -81,8 +83,7 @@ describe("Codex plugin positive contracts", () => {
 
 describe("Codex plugin negative contracts", () => {
   it("does not add a second MCP server or tool", () => {
-    const mcp = readJson(resolve(pluginRoot, ".mcp.json"));
-    const servers = mcp.mcpServers as Record<string, unknown>;
+    const servers = readJson(resolve(pluginRoot, ".mcp.json"));
     const serverSource = readFileSync(resolve(root, "src", "server.ts"), "utf8");
 
     expect(Object.keys(servers)).toEqual(["inspectrum"]);
@@ -91,8 +92,10 @@ describe("Codex plugin negative contracts", () => {
   });
 
   it("rejects mutable or stale package selectors", () => {
-    const mcp = readJson(resolve(pluginRoot, ".mcp.json"));
-    const servers = mcp.mcpServers as Record<string, { args: string[] }>;
+    const servers = readJson(resolve(pluginRoot, ".mcp.json")) as Record<
+      string,
+      { args: string[] }
+    >;
     const packageSelector = servers.inspectrum.args.at(-1);
 
     expect(packageSelector).toBe(`inspectrum@${String(pkg.version)}`);
