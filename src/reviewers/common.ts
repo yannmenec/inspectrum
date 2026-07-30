@@ -538,7 +538,10 @@ function parseClaudeOutput(raw: string, reviewerId: string, label: string): RawR
     throw new ReviewerOperationalError(`${label} reviewer failed: ${envelope.data.result}`);
   }
 
-  return parseRawReview(envelope.data.result, reviewerId, label);
+  const rawReview = envelope.data.structured_output == null
+    ? envelope.data.result
+    : JSON.stringify(envelope.data.structured_output);
+  return parseRawReview(rawReview, reviewerId, label);
 }
 
 function dropNullKeys(value: unknown): unknown {
