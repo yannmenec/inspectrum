@@ -111,7 +111,6 @@ describe("distribution metadata", () => {
     );
     expect(readme).toContain("v0.2.0 bundle was incomplete");
   });
-
   it("keeps the future npm workflow manual and isolates stage credentials", () => {
     const workflow = readFileSync(
       resolve(root, ".github/workflows/npm-stage.yml"),
@@ -173,5 +172,49 @@ describe("distribution metadata", () => {
     expect(workflow).not.toMatch(/(^|\n)\s*npm publish(?:\s|$)/);
     expect(workflow).not.toMatch(/\bnpm stage approve\b/);
     expect(workflow).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN|provenance\s*[:=]\s*false/i);
+  });
+
+  it("keeps release packaging separate from the write-scoped draft release", () => {
+    const workflow = readFileSync(
+      resolve(root, ".github/workflows/release.yml"),
+      "utf8",
+    );
+    const releaseStart = workflow.indexOf("\n  release:\n");
+    const packBlock = workflow.slice(workflow.indexOf("\n  pack:\n"), releaseStart);
+    const releaseBlock = workflow.slice(releaseStart);
+    const runbook = readFileSync(resolve(root, "CONTRIBUTING.md"), "utf8");
+
+    expect(workflow).toContain("permissions: {}");
+    expect(packBlock).toContain("contents: read");
+    expect(packBlock).not.toContain("contents: write");
+    expect(packBlock).toContain("persist-credentials: false");
+    expect(packBlock).toContain("package-manager-cache: false");
+    expect(packBlock).not.toContain('cache: "npm"');
+    expect(packBlock).not.toContain("softprops/action-gh-release@");
+    expect(releaseBlock).toContain("needs: pack");
+    expect(releaseBlock).toContain("contents: write");
+    expect(releaseBlock).not.toMatch(/\bnpm (ci|run|test|pack)\b/);
+    expect(releaseBlock).not.toContain("actions/checkout@");
+    expect(releaseBlock).not.toContain("actions/setup-node@");
+    expect(releaseBlock).toContain(
+      "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    );
+    expect(workflow).toContain(
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+    );
+    expect(workflow).toContain(
+      "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+    );
+    expect(workflow).toContain(
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    );
+    expect(workflow).toContain(
+      "softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda",
+    );
+    expect(workflow).toContain("draft: true");
+    expect(workflow).not.toMatch(/(^|\n)\s*npm publish(?:\s|$)/);
+    expect(runbook).not.toMatch(/(^|\n)\s*npm publish(?:\s|$)/);
+    expect(runbook).toContain("gh workflow run npm-stage.yml");
+    expect(runbook).toContain("separate explicit authorization");
   });
 });
