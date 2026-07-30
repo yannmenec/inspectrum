@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMcpbManifest, mcpbArchiveName } from "./mcpb-lib.mjs";
 
-const root = resolve(import.meta.dirname, "..");
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const readJson = (path) => JSON.parse(readFileSync(resolve(root, path), "utf8"));
 const readText = (path) => readFileSync(resolve(root, path), "utf8");
 
@@ -14,6 +14,7 @@ function assert(condition, message) {
 function assertPngDimensions(path, width, height) {
   const png = readFileSync(resolve(root, path));
   const signature = "89504e470d0a1a0a";
+  assert(png.length >= 24, `${path} is too short to contain PNG dimensions`);
   assert(png.subarray(0, 8).toString("hex") === signature, `${path} is not a PNG`);
   assert(
     png.readUInt32BE(16) === width && png.readUInt32BE(20) === height,

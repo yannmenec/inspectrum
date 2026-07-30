@@ -122,7 +122,7 @@ describe("distribution metadata", () => {
     expect(readme).toMatch(/^<div align="center">\n\n# Inspectrum\n/m);
     expect(registry.title).toBe("Inspectrum");
     expect(manifest.display_name).toBe("Inspectrum");
-    expect(marketplace.plugins[0]).toMatchObject({
+    expect(marketplace.plugins.find((entry) => entry.name === "inspectrum")).toMatchObject({
       name: "inspectrum",
       displayName: "Inspectrum",
     });
