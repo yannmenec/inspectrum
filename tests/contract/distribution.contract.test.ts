@@ -143,7 +143,8 @@ describe("distribution metadata", () => {
     expect(kit).toContain("Claude Community");
     expect(kit).toContain("Glama");
     expect(kit).toContain("PulseMCP");
-    expect(kit).toContain("S1");
+    expect(kit).toContain("release-candidate report");
+    expect(kit).not.toMatch(/\bS[123]\b/);
     expect(kit).toContain("https://modelcontextprotocol.io/registry/quickstart");
     expect(kit).toContain("https://code.claude.com/docs/en/plugins");
     expect(kit).toContain("https://glama.ai/mcp/methodology");

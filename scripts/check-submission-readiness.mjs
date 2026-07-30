@@ -69,7 +69,7 @@ export function checkLocalSubmissionKit() {
     "Claude Community",
     "Glama",
     "PulseMCP",
-    "S1",
+    "release-candidate report",
     "Do not submit",
   ]) {
     assert(kit.includes(marker), `${kitPath} is missing ${marker}`);
