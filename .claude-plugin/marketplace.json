@@ -5,6 +5,7 @@
   "plugins": [
     {
       "name": "inspectrum",
+      "displayName": "Inspectrum",
       "source": "./",
       "description": "Codex plan gate for Claude Code plan mode + on-demand peer-LLM plan review"
     }
