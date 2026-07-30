@@ -1,0 +1,27 @@
+{
+  "name": "inspectrum",
+  "version": "0.2.2",
+  "description": "Review Codex plans with Claude through Inspectrum's existing MCP tool.",
+  "author": {
+    "name": "Yann Menec",
+    "url": "https://github.com/yannmenec"
+  },
+  "homepage": "https://github.com/yannmenec/inspectrum#readme",
+  "repository": "https://github.com/yannmenec/inspectrum",
+  "license": "MIT",
+  "keywords": ["plan-review", "claude", "codex", "mcp"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Inspectrum",
+    "shortDescription": "Review Codex plans with Claude.",
+    "longDescription": "Send a Codex development plan to Claude through Inspectrum and return its verdict and findings.",
+    "developerName": "Yann Menec",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://github.com/yannmenec/inspectrum",
+    "defaultPrompt": [
+      "Review this plan with Claude using Inspectrum."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}
