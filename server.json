@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.yannmenec/inspectrum",
+  "title": "Inspectrum",
+  "description": "Review coding-agent plans with peer models and return attributed findings plus a structured verdict.",
+  "repository": {
+    "url": "https://github.com/yannmenec/inspectrum",
+    "source": "github",
+    "id": "1242227459"
+  },
+  "version": "0.2.2",
+  "websiteUrl": "https://github.com/yannmenec/inspectrum/blob/main/docs/claude-code-codex-plan-review.md",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "inspectrum",
+      "version": "0.2.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
