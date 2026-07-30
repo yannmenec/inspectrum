@@ -105,7 +105,7 @@ describe("Codex plugin negative contracts", () => {
 
     expect(skill).toContain("isError");
     expect(skill).toContain("structuredContent");
-    expect(skill).toContain("La revue Claude n'a pas abouti");
-    expect(skill).toMatch(/ne (présente|transforme) jamais.*approve/i);
+    expect(skill).toContain("The Claude review did not complete");
+    expect(skill).toMatch(/never present.*failure.*approve/is);
   });
 });

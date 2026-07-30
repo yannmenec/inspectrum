@@ -52,15 +52,15 @@ npm ci
 npm run build
 npx tsc --noEmit
 npx eslint src/
-npm test
 npm run test:coverage
-python3 /path/to/plugin-creator/scripts/validate_plugin.py \
-  plugins/inspectrum
+npm test -- tests/contract/codex-plugin.contract.test.ts
 ```
 
-The repository build and tests run the local `0.2.2` source. The committed
-plugin launcher itself cannot complete its public npm smoke test until
-`inspectrum@0.2.2` is published.
+The repository build and tests run the local `0.2.2` source. The targeted
+contract validates the Codex manifest, marketplace entry, pinned MCP package,
+reviewer direction, and failure semantics. The committed plugin launcher
+itself cannot complete its public npm smoke test until `inspectrum@0.2.2` is
+published.
 
 ## Failure and privacy
 
