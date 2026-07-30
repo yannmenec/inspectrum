@@ -111,6 +111,69 @@ describe("distribution metadata", () => {
     );
     expect(readme).toContain("v0.2.0 bundle was incomplete");
   });
+  it("keeps the future npm workflow manual and isolates stage credentials", () => {
+    const workflow = readFileSync(
+      resolve(root, ".github/workflows/npm-stage.yml"),
+      "utf8",
+    );
+    const onBlock = workflow.slice(workflow.indexOf("\non:\n"), workflow.indexOf("\npermissions:"));
+    const validateStart = workflow.indexOf("\n  validate:\n");
+    const stageStart = workflow.indexOf("\n  stage:\n");
+    const validateBlock = workflow.slice(validateStart, stageStart);
+    const stageBlock = workflow.slice(stageStart);
+    const publishStepStart = stageBlock.indexOf("\n      - name: Stage the verified candidate\n");
+    const beforePublish = stageBlock.slice(0, publishStepStart);
+    const publishStep = stageBlock.slice(publishStepStart);
+
+    expect(onBlock.match(/^ {2}[a-z_-]+:/gm)).toEqual(["  workflow_dispatch:"]);
+    expect(validateBlock).toContain("npm ci");
+    expect(validateBlock).toContain("Smoke the exact candidate");
+    expect(validateBlock).toContain('const server = readJson("server.json")');
+    expect(validateBlock).not.toContain("id-token: write");
+    expect(stageBlock).toContain("needs: validate");
+    expect(stageBlock).toContain("environment: npm");
+    expect(stageBlock).toContain("id-token: write");
+    expect(stageBlock).not.toContain("contents: read");
+    expect(stageBlock).toContain("sha256sum -c");
+    expect(stageBlock).not.toContain("npm ci");
+    expect(stageBlock).not.toMatch(/\bnpm (run|test|pack)\b/);
+    expect(stageBlock).not.toContain("actions/checkout@");
+    expect(stageBlock).toContain('npm_config_ignore_scripts: "true"');
+    expect(beforePublish.match(/ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""/g)).toHaveLength(4);
+    expect(beforePublish.match(/ACTIONS_ID_TOKEN_REQUEST_URL: ""/g)).toHaveLength(4);
+    expect(publishStep).not.toContain("ACTIONS_ID_TOKEN_REQUEST_");
+    expect(publishStep).toContain('run: npm stage publish "$TARBALL" --access public --json');
+    expect(publishStep).not.toMatch(/^\s+run:\s*\|/m);
+    expect(workflow).toContain(
+      'JSON.stringify(pkg.publishConfig) !== JSON.stringify({ access: "public" })',
+    );
+    expect(workflow).toContain("overwrite: true");
+    expect(workflow.match(/^\s*id-token:\s*write\s*$/gm)).toHaveLength(1);
+    expect(workflow).toContain('node-version: "24"');
+    expect(workflow).toContain("npm@11.15.0");
+    expect(workflow).toContain("github.ref_type == 'tag'");
+    expect(workflow).toContain("github.ref_name == inputs.tag");
+    expect(workflow).toContain("ref: ${{ github.sha }}");
+    expect(workflow).toContain('git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"');
+    expect(workflow).toContain(
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+    );
+    expect(workflow).toContain(
+      "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+    );
+    expect(workflow).toContain(
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    );
+    expect(workflow).toContain(
+      "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    );
+    expect(workflow).toContain('npm stage publish "$TARBALL" --access public --json');
+    expect(workflow.match(/\bnpm stage publish\b/g)).toHaveLength(1);
+    expect(workflow).not.toMatch(/(^|\n)\s*npm publish(?:\s|$)/);
+    expect(workflow).not.toMatch(/\bnpm stage approve\b/);
+    expect(workflow).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN|provenance\s*[:=]\s*false/i);
+  });
+
   it("keeps release packaging separate from the write-scoped draft release", () => {
     const workflow = readFileSync(
       resolve(root, ".github/workflows/release.yml"),
