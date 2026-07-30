@@ -134,6 +134,9 @@ describe("distribution metadata", () => {
     );
     expect(kit).toContain("**Claude Community:**");
     expect(kit).toContain("**MCP directories:**");
+    expect(kit).toContain("## Channel 2 — Codex Git marketplace");
+    expect(kit).toContain("codex plugin marketplace add yannmenec/inspectrum --ref main");
+    expect(kit).toContain("does not by itself create a listing");
     expect(kit).toContain("bounded, fail-open");
     expect(kit).toMatch(/attributed findings and one structured\s+verdict/);
     expect(pkg.description).toBe(

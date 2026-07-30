@@ -67,6 +67,7 @@ export function checkLocalSubmissionKit() {
 
   for (const marker of [
     "MCP Registry",
+    "Codex Git marketplace",
     "Claude Community",
     "Glama",
     "PulseMCP",
