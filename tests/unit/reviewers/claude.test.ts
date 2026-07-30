@@ -55,6 +55,36 @@ describe("ClaudeReviewer", () => {
     expect(Array.isArray(result.findings)).toBe(true);
   });
 
+  it("parses Claude Code 2.1.145 structured_output when result is prose", async () => {
+    const envelope = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      duration_ms: 1234,
+      duration_api_ms: 1000,
+      num_turns: 1,
+      result: "The structured review is available in structured_output.",
+      session_id: "00000000-0000-0000-0000-000000000000",
+      total_cost_usd: 0.01,
+      structured_output: {
+        ...validRawReviewWithFinding,
+        findings: [{ ...validRawReviewWithFinding.findings[0], suggested_fix: null }],
+        revised_plan: null,
+      },
+    });
+    mockSpawn.mockReturnValue(makeMockProcess(envelope));
+    const reviewer = new ClaudeReviewer("my-claude", cfg);
+
+    const result = await reviewer.review("# Plan", "all");
+
+    expect(result).toMatchObject({
+      verdict: "revise",
+      summary: "Needs work.",
+      reviewer: "my-claude",
+    });
+    expect(result.findings[0]!.reviewer).toBe("my-claude");
+  });
+
   it("throws ReviewerError on is_error=true", async () => {
     const envelope = JSON.stringify({
       type: "result",
