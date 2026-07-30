@@ -115,6 +115,7 @@ describe("distribution metadata", () => {
     );
     expect(readme).toContain("v0.2.0 bundle was incomplete");
   });
+
   it("positions the product honestly against skills and manual agent coordination", () => {
     const readme = readFileSync(resolve(root, "README.md"), "utf8");
     const kit = readFileSync(
@@ -123,6 +124,7 @@ describe("distribution metadata", () => {
     );
 
     expect(readme).toContain("## When a skill is enough");
+    expect(readme).toContain("**Inspectrum wires a rival LLM");
     expect(readme).toContain(
       "For an occasional second opinion, a rule can tell one agent to call another",
     );
