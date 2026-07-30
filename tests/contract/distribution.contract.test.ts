@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -10,6 +11,9 @@ const root = resolve(import.meta.dirname, "..", "..");
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const lock = JSON.parse(readFileSync(resolve(root, "package-lock.json"), "utf8"));
 const plugin = JSON.parse(readFileSync(resolve(root, ".claude-plugin/plugin.json"), "utf8"));
+const marketplace = JSON.parse(
+  readFileSync(resolve(root, ".claude-plugin/marketplace.json"), "utf8"),
+);
 const registry = JSON.parse(readFileSync(resolve(root, "server.json"), "utf8"));
 
 describe("distribution metadata", () => {
@@ -110,6 +114,42 @@ describe("distribution metadata", () => {
       `releases/download/v${pkg.version}/inspectrum-${pkg.version}.mcpb`,
     );
     expect(readme).toContain("v0.2.0 bundle was incomplete");
+  });
+
+  it("keeps the public product name exactly Inspectrum", () => {
+    const readme = readFileSync(resolve(root, "README.md"), "utf8");
+    const manifest = createMcpbManifest(pkg);
+
+    expect(readme).toMatch(/^<div align="center">\n\n# Inspectrum\n/m);
+    expect(registry.title).toBe("Inspectrum");
+    expect(manifest.display_name).toBe("Inspectrum");
+    expect(marketplace.plugins[0]).toMatchObject({
+      name: "inspectrum",
+      displayName: "Inspectrum",
+    });
+  });
+
+  it("ships a guarded, locally checkable submission kit", () => {
+    const kit = readFileSync(
+      resolve(root, "docs/distribution/0.2.2-submission-kit.md"),
+      "utf8",
+    );
+    const output = execFileSync(
+      process.execPath,
+      [resolve(root, "scripts/check-submission-readiness.mjs")],
+      { cwd: root, encoding: "utf8" },
+    );
+
+    expect(kit).toContain("MCP Registry");
+    expect(kit).toContain("Claude Community");
+    expect(kit).toContain("Glama");
+    expect(kit).toContain("PulseMCP");
+    expect(kit).toContain("S1");
+    expect(kit).toContain("https://modelcontextprotocol.io/registry/quickstart");
+    expect(kit).toContain("https://code.claude.com/docs/en/plugins");
+    expect(kit).toContain("https://glama.ai/mcp/methodology");
+    expect(kit).toContain("https://www.pulsemcp.com/submit");
+    expect(output).toContain("Local submission kit is internally consistent.");
   });
 
   it("keeps the future npm workflow manual and isolates stage credentials", () => {

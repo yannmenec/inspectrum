@@ -1,6 +1,6 @@
 <div align="center">
 
-# inspectrum
+# Inspectrum
 
 ### Add a second model's review before a coding plan reaches execution.
 
