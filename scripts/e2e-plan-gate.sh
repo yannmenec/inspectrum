@@ -17,6 +17,8 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 E2E_DIR="$(mktemp -d "${TMPDIR:-/tmp}/inspectrum-e2e.XXXXXX")"
 CALLS_DIR="$E2E_DIR/calls"
+PROOF_MARKER="$E2E_DIR/review-start.marker"
+RUN_TOKEN="inspectrum-e2e-$(date +%s)-$$"
 FAILED=1
 
 cleanup() {
@@ -99,9 +101,11 @@ echo "// scratch" > "$E2E_DIR/project/util.js"
 
 PROMPT="Produce a short implementation plan (under 15 lines) to add a hello() \
 function returning the string 'hello' to util.js. When the plan is ready, \
-finish planning. If plan review feedback arrives, address it and finish again."
+include the exact marker '$RUN_TOKEN' in its heading and finish planning. \
+If plan review feedback arrives, address it and finish again."
 
 echo "==> running headless Claude Code (plan mode, haiku)"
+touch "$PROOF_MARKER"
 set +e
 (cd "$E2E_DIR/project" && claude -p "$PROMPT" \
   --settings "$E2E_DIR/settings.json" \
@@ -134,9 +138,31 @@ if (!Array.isArray(state.approved_hashes) || state.approved_hashes.length === 0)
 if (!Number.isInteger(state.rounds_used) || state.rounds_used !== 0) process.exit(1);
 if (!Array.isArray(state.denied) || state.denied.length === 0) process.exit(1);
 ' "$STATE_FILE" || fail "plan-gate state does not record the deny/approve loop"
+else
+  REAL_CODEX_PROOFS=0
+  SESSIONS_DIR="${HOME}/.inspectrum/sessions"
+  if [ -d "$SESSIONS_DIR" ]; then
+    while IFS= read -r session_dir; do
+      [ -f "$session_dir/plan-input.md" ] || continue
+      [ -f "$session_dir/session.json" ] || continue
+      grep -Fq "$RUN_TOKEN" "$session_dir/plan-input.md" || continue
+      if node -e '
+const session = require(process.argv[1]);
+if (!Array.isArray(session.reviewers) || !session.reviewers.includes("codex")) process.exit(1);
+' "$session_dir/session.json"; then
+        REAL_CODEX_PROOFS=$((REAL_CODEX_PROOFS + 1))
+      fi
+    done < <(find "$SESSIONS_DIR" -mindepth 1 -maxdepth 1 -type d -newer "$PROOF_MARKER" -print)
+  fi
+  [ "$REAL_CODEX_PROOFS" -gt 0 ] || fail \
+    "real Codex produced no attributable review session; the gate may only have failed open"
 fi
 
 grep -q '"result"' "$E2E_DIR/claude-result.json" || fail "claude produced no result JSON"
 
 FAILED=0
-echo "==> e2e plan-gate: PASS (bounce + approve loop verified)"
+if [ -z "${INSPECTRUM_E2E_CODEX:-}" ]; then
+  echo "==> e2e plan-gate: PASS (bounce + approve loop verified)"
+else
+  echo "==> e2e plan-gate: PASS (real Codex review session verified: $REAL_CODEX_PROOFS)"
+fi
