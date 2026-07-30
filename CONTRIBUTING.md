@@ -37,8 +37,9 @@ this repo, and never paste secrets into a plan when reproducing an issue.
 
 ## Release runbook
 
-inspectrum is published to npm as a public unscoped package. The owner
-runs the publish steps; CI and `prepack` are the safety nets.
+inspectrum is published to npm as a public unscoped package. Release
+automation builds reviewable artifacts and stages an npm candidate; a
+separate human approval with 2FA is required before public availability.
 
 ### Pre-release checks (always run)
 
@@ -50,18 +51,36 @@ npm run build                   # 0 errors
 npm run test:coverage           # green, ≥ 90/90/90 on the gated scopes
 npm run test:e2e                # green
 npm pack --dry-run --json       # tarball entry list looks right
-npm view inspectrum name version --json    # confirm the name is still available
+npm run build:mcpb              # build the versioned Claude Desktop bundle
+npm run verify:mcpb             # schema, contents, dependencies, MCP smoke
+npm view inspectrum version --json         # record the current public version
 ```
 
-### Tagging + publishing
+### Tagging, draft release, and npm staging
+
+Only continue after the exact remote actions have received separate explicit
+authorization. The tag push triggers `.github/workflows/release.yml`; it builds
+without write credentials, then a small write-scoped job creates or updates a
+draft GitHub release with the verified MCPB. It does not make an npm version
+public.
 
 ```bash
 git checkout main && git pull --ff-only
 VERSION=$(node -p "require('./package.json').version")
 git tag -a "v$VERSION" -m "v$VERSION"
-git push origin main --tags
-npm publish --access public
+git push origin "v$VERSION"
+gh workflow run npm-stage.yml --ref "v$VERSION" -f tag="v$VERSION"
 ```
+
+The `npm` environment must allow only selected tags matching `v*` and require
+maintainer review; the workflow separately rejects anything except stable
+`vMAJOR.MINOR.PATCH`. A repository ruleset should independently prevent release
+tags from being moved or deleted. npm trusted publishing must match repository
+`yannmenec/inspectrum`, workflow `npm-stage.yml`, environment `npm`, and the
+stage-only action. The workflow validates and stages the exact tarball; it does
+not approve the staged version. Making the staged version public requires a
+separate explicit authorization and 2FA review. Never infer that authorization
+from a merged PR, pushed tag, draft release, or successful staging run.
 
 ### Post-publish smoke (60 s)
 
@@ -74,13 +93,12 @@ Expect 4 sections (Runtime / Config / Sessions / Reviewers) and a non-zero
 exit if no reviewer CLI is installed — that's the correct behavior on a
 clean machine.
 
-### Why `npm publish --dry-run` is not a safety net
+### Why a dry run is not a publication safety net
 
-npm 11's `--dry-run` prints "would publish" output regardless of whether
-the real call would have succeeded or failed (and it never makes network
-calls). Treat the flag as documentation of what *would* ship, not as a
-gate. The actual safety nets are `prepack`, the `files` allowlist, and
-manual review of `npm pack --dry-run --json` output before tagging.
+npm's dry-run output documents what would ship but does not prove that a
+registry mutation would succeed. The safety nets are `prepack`, the `files`
+allowlist, exact-tarball smoke tests, protected staging, and human review of the
+staged package before a separately authorized 2FA approval.
 
 ## Pre-commit (lefthook)
 

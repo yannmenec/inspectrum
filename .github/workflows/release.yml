@@ -5,23 +5,37 @@ on:
     tags:
       - "v*"
 
+permissions: {}
+
 jobs:
   pack:
-    name: Pack and upload artifacts
+    name: Build release candidate without write credentials
+    if: github.repository == 'yannmenec/inspectrum'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          node-version: "20"
-          cache: "npm"
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
 
       - name: Verify tag matches package version
+        shell: bash
         run: |
+          set -euo pipefail
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Only stable vMAJOR.MINOR.PATCH tags are supported" >&2
+            exit 1
+          fi
           expected="v$(node -p "require('./package.json').version")"
           if [[ "$GITHUB_REF_NAME" != "$expected" ]]; then
             echo "Tag $GITHUB_REF_NAME does not match package version $expected" >&2
@@ -39,16 +53,16 @@ jobs:
 
       - name: Pack
         id: pack
+        shell: bash
         run: |
+          set -euo pipefail
           npm pack
-          echo "tarball=$(ls inspectrum-*.tgz)" >> "$GITHUB_OUTPUT"
-
-      - name: Upload tarball artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.pack.outputs.tarball }}
-          path: ${{ steps.pack.outputs.tarball }}
-          if-no-files-found: error
+          mapfile -t tarballs < <(find . -maxdepth 1 -type f -name 'inspectrum-*.tgz' -print)
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "npm pack did not leave exactly one tarball" >&2
+            exit 1
+          fi
+          echo "tarball=${tarballs[0]#./}" >> "$GITHUB_OUTPUT"
 
       - name: Build MCPB bundle
         run: npm run build:mcpb
@@ -56,13 +70,47 @@ jobs:
       - name: Validate, inspect, and smoke MCPB bundle
         run: npm run verify:mcpb
 
-      - name: Upload .mcpb to Release (draft)
+      - name: Hash the exact candidates
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: sha256sum "$TARBALL" dist-mcpb/inspectrum-*.mcpb > release-candidate.sha256
+
+      - name: Upload candidates for the write-scoped job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-${{ github.run_id }}
+          path: |
+            ${{ steps.pack.outputs.tarball }}
+            dist-mcpb/inspectrum-*.mcpb
+            release-candidate.sha256
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: true
+
+  release:
+    name: Create draft release from validated MCPB
+    needs: pack
+    if: github.repository == 'yannmenec/inspectrum'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download validated candidates
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-candidate-${{ github.run_id }}
+          path: candidate
+
+      - name: Verify candidate hashes
+        working-directory: candidate
+        run: sha256sum -c release-candidate.sha256
+
+      - name: Upload MCPB to a draft release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
-          files: |
-            dist-mcpb/inspectrum-*.mcpb
+          files: candidate/dist-mcpb/inspectrum-*.mcpb
           fail_on_unmatched_files: true
           draft: true
-
-      # Intentional: this workflow does NOT run `npm publish`. The owner runs
-      # `npm publish --access public` manually after reviewing the tarball.
