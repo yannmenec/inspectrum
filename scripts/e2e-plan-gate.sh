@@ -94,6 +94,33 @@ EOF
   export PATH="$E2E_DIR/bin:$PATH"
 else
   echo "==> INSPECTRUM_E2E_CODEX=1: using the real codex CLI"
+  echo "==> validating the configured codex reviewer backend"
+  CODEX_REVIEWERS_FILE="$E2E_DIR/codex-reviewer-ids.txt"
+  if ! node --input-type=module - "$REPO_DIR" > "$CODEX_REVIEWERS_FILE" <<'NODE'
+import { pathToFileURL } from "node:url";
+
+const root = process.argv[2];
+const { loadConfig } = await import(pathToFileURL(`${root}/dist/config.js`));
+const { resolveReviewerBackend } = await import(
+  pathToFileURL(`${root}/dist/reviewers/common.js`)
+);
+const { findConfiguredCodexReviewerIds } = await import(
+  pathToFileURL(`${root}/scripts/e2e-gate-proof.mjs`)
+);
+const config = loadConfig();
+const reviewerIds = findConfiguredCodexReviewerIds(
+  config,
+  resolveReviewerBackend,
+);
+if (reviewerIds.length === 0) process.exit(1);
+process.stdout.write(`${reviewerIds.join("\n")}\n`);
+NODE
+  then
+    echo "ASSERTION FAILED: real mode requires a codex reviewer backed by the codex binary" >&2
+    exit 1
+  fi
+  command -v codex > "$E2E_DIR/codex-path.txt"
+  codex --version > "$E2E_DIR/codex-version.txt"
 fi
 
 echo "==> scaffolding scratch project"
@@ -139,21 +166,13 @@ if (!Number.isInteger(state.rounds_used) || state.rounds_used !== 0) process.exi
 if (!Array.isArray(state.denied) || state.denied.length === 0) process.exit(1);
 ' "$STATE_FILE" || fail "plan-gate state does not record the deny/approve loop"
 else
-  REAL_CODEX_PROOFS=0
   SESSIONS_DIR="${HOME}/.inspectrum/sessions"
-  if [ -d "$SESSIONS_DIR" ]; then
-    while IFS= read -r session_dir; do
-      [ -f "$session_dir/plan-input.md" ] || continue
-      [ -f "$session_dir/session.json" ] || continue
-      grep -Fq "$RUN_TOKEN" "$session_dir/plan-input.md" || continue
-      if node -e '
-const session = require(process.argv[1]);
-if (!Array.isArray(session.reviewers) || !session.reviewers.includes("codex")) process.exit(1);
-' "$session_dir/session.json"; then
-        REAL_CODEX_PROOFS=$((REAL_CODEX_PROOFS + 1))
-      fi
-    done < <(find "$SESSIONS_DIR" -mindepth 1 -maxdepth 1 -type d -newer "$PROOF_MARKER" -print)
-  fi
+  REAL_PROOFS_FILE="$E2E_DIR/real-codex-proofs.txt"
+  node "$REPO_DIR/scripts/e2e-gate-proof.mjs" \
+    "$SESSIONS_DIR" "$PROOF_MARKER" "$RUN_TOKEN" "$CODEX_REVIEWERS_FILE" \
+    > "$REAL_PROOFS_FILE" \
+    || fail "unable to inspect real Codex review sessions"
+  REAL_CODEX_PROOFS=$(wc -l < "$REAL_PROOFS_FILE" | tr -d ' ')
   [ "$REAL_CODEX_PROOFS" -gt 0 ] || fail \
     "real Codex produced no attributable review session; the gate may only have failed open"
 fi
