@@ -54,12 +54,14 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-// Patch writeSession to use tmpDir — we import store and override default
+// Patch writeSession itself: replacing the exported defaultSessionsDir does not
+// change the module-local binding used by the real writeSession implementation.
 vi.mock("../../../src/session/store.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../src/session/store.js")>();
   return {
     ...actual,
-    defaultSessionsDir: () => tmpDir,
+    writeSession: (opts: Parameters<typeof actual.writeSession>[0]) =>
+      actual.writeSession({ ...opts, baseDir: tmpDir }),
   };
 });
 
