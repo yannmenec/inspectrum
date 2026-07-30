@@ -1,0 +1,20 @@
+{
+  "name": "inspectrum",
+  "interface": {
+    "displayName": "Inspectrum"
+  },
+  "plugins": [
+    {
+      "name": "inspectrum",
+      "source": {
+        "source": "local",
+        "path": "./plugins/inspectrum"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
