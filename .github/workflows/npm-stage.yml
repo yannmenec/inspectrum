@@ -291,7 +291,7 @@ jobs:
 
       - name: Stage the verified candidate
         env:
-          TARBALL: candidate/${{ steps.verify.outputs.tarball }}
+          TARBALL: ./candidate/${{ steps.verify.outputs.tarball }}
           npm_config_ignore_scripts: "true"
         shell: bash -euo pipefail {0}
         run: npm stage publish "$TARBALL" --access public --json

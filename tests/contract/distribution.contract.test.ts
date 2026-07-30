@@ -233,6 +233,9 @@ describe("distribution metadata", () => {
     expect(beforePublish.match(/ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""/g)).toHaveLength(4);
     expect(beforePublish.match(/ACTIONS_ID_TOKEN_REQUEST_URL: ""/g)).toHaveLength(4);
     expect(publishStep).not.toContain("ACTIONS_ID_TOKEN_REQUEST_");
+    expect(publishStep).toContain(
+      "TARBALL: ./candidate/${{ steps.verify.outputs.tarball }}",
+    );
     expect(publishStep).toContain('run: npm stage publish "$TARBALL" --access public --json');
     expect(publishStep).not.toMatch(/^\s+run:\s*\|/m);
     expect(workflow).toContain(
