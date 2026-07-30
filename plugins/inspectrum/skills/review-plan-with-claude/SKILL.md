@@ -37,9 +37,9 @@ executing it or silently replacing the original plan.
 If the call fails, returns `isError: true`, or has no valid
 `structuredContent`, say:
 
-> La revue Claude n'a pas abouti.
+> The Claude review did not complete.
 
 Show the concise, non-sensitive error text when available. Suggest checking
 `claude --version`, completing Claude's interactive authentication, and then
-retrying the review. Ne présente jamais cet échec comme `approve`, comme une
-revue réussie, ou comme un avis réellement produit par Claude.
+retrying the review. Never present this failure as `approve`, as a successful
+review, or as an opinion actually produced by Claude.

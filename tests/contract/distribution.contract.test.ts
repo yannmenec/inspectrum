@@ -203,10 +203,10 @@ describe("distribution metadata", () => {
       "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
     );
     expect(workflow).toContain(
-      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
     );
     expect(workflow).toContain(
-      "actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53",
+      "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
     );
     expect(workflow).toContain('npm stage publish "$TARBALL" --access public --json');
     expect(workflow.match(/\bnpm stage publish\b/g)).toHaveLength(1);
@@ -238,7 +238,7 @@ describe("distribution metadata", () => {
     expect(releaseBlock).not.toContain("actions/checkout@");
     expect(releaseBlock).not.toContain("actions/setup-node@");
     expect(releaseBlock).toContain(
-      "actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53",
+      "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
     );
     expect(workflow).toContain(
       "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
@@ -247,7 +247,7 @@ describe("distribution metadata", () => {
       "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
     );
     expect(workflow).toContain(
-      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
     );
     expect(workflow).toContain(
       "softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda",
