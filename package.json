@@ -1,7 +1,7 @@
 {
   "name": "inspectrum",
   "version": "0.2.2",
-  "description": "Plan review for Claude Code and stdio MCP hosts, with a bounded Codex gate and local evidence",
+  "description": "Automatic Codex plan review in Claude Code; on-demand in local MCP hosts; human approval stays yours",
   "type": "module",
   "bin": {
     "inspectrum": "dist/cli.js"

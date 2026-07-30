@@ -67,6 +67,8 @@ export function checkLocalSubmissionKit() {
 
   for (const marker of [
     "MCP Registry",
+    "Codex Git marketplace",
+    "OpenAI Plugin Directory",
     "Claude Community",
     "Glama",
     "PulseMCP",

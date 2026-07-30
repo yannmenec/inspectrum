@@ -115,6 +115,56 @@ describe("distribution metadata", () => {
     );
     expect(readme).toContain("v0.2.0 bundle was incomplete");
   });
+
+  it("positions the product honestly against skills and manual agent coordination", () => {
+    const readme = readFileSync(resolve(root, "README.md"), "utf8");
+    const kit = readFileSync(
+      resolve(root, "docs/distribution/0.2.2-submission-kit.md"),
+      "utf8",
+    );
+
+    expect(readme).toContain("## When a skill is enough");
+    expect(readme).toContain("**Inspectrum wires a rival LLM");
+    expect(readme).toContain(
+      "For an occasional second opinion, a rule can tell one agent to call another",
+    );
+    expect(readme).toContain(
+      "Other local MCP hosts can call the same `review_plan` contract on demand.",
+    );
+    expect(readme).toContain(
+      "output validation, health checks, failure policy, and session record",
+    );
+    expect(kit).toContain("**Claude Community:**");
+    expect(kit).toContain("**MCP directories:**");
+    expect(kit).toContain("## Channel 2 — Codex Git marketplace");
+    expect(kit).toContain("codex plugin marketplace add yannmenec/inspectrum --ref main");
+    expect(kit).toContain("does not by itself create a listing");
+    expect(kit).toContain("## Channel 3 — OpenAI Plugin Directory");
+    expect(kit).toContain("The viable central-directory route is **Skills only**");
+    expect(kit).toContain("five positive tests");
+    expect(kit).toContain("https://platform.openai.com/plugins");
+    expect(kit).toContain("bounded, fail-open");
+    expect(kit).toMatch(/attributed findings and one structured\s+verdict/);
+    expect(pkg.description).toBe(
+      "Automatic Codex plan review in Claude Code; on-demand in local MCP hosts; human approval stays yours",
+    );
+    expect(registry.description).toBe(
+      "Review coding-agent plans on demand with peer models, attributed findings, and a structured verdict.",
+    );
+    expect(plugin.description).toBe(
+      "Automatic, bounded, fail-open Codex review before Claude Code approval; final approval stays yours.",
+    );
+    expect(marketplace.description).toBe(
+      "Automatic Codex review before Claude Code approval, with attributed findings and local evidence.",
+    );
+    expect(
+      marketplace.plugins.find((entry) => entry.name === "inspectrum")?.description,
+    ).toBe(
+      "Automatic Codex plan gate for Claude Code, plus peer review on demand; final approval stays yours",
+    );
+    expect(kit.replace(/\s+/g, " ")).toContain(registry.description);
+  });
+
   it("keeps the public product name exactly Inspectrum", () => {
     const readme = readFileSync(resolve(root, "README.md"), "utf8");
     const manifest = createMcpbManifest(pkg);
