@@ -17,6 +17,8 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 E2E_DIR="$(mktemp -d "${TMPDIR:-/tmp}/inspectrum-e2e.XXXXXX")"
 CALLS_DIR="$E2E_DIR/calls"
+PROOF_MARKER="$E2E_DIR/review-start.marker"
+RUN_TOKEN="inspectrum-e2e-$(date +%s)-$$"
 FAILED=1
 
 cleanup() {
@@ -92,6 +94,49 @@ EOF
   export PATH="$E2E_DIR/bin:$PATH"
 else
   echo "==> INSPECTRUM_E2E_CODEX=1: using the real codex CLI"
+  echo "==> validating the configured codex reviewer backend"
+  CODEX_REVIEWERS_FILE="$E2E_DIR/codex-reviewers.json"
+  if ! node --input-type=module - "$REPO_DIR" > "$CODEX_REVIEWERS_FILE" <<'NODE'
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+
+const root = process.argv[2];
+const { loadConfig } = await import(pathToFileURL(`${root}/dist/config.js`));
+const { resolveReviewerBackend } = await import(
+  pathToFileURL(`${root}/dist/reviewers/common.js`)
+);
+const {
+  findConfiguredCodexReviewers,
+  resolveExecutablePath,
+} = await import(
+  pathToFileURL(`${root}/scripts/e2e-gate-proof.mjs`)
+);
+const config = loadConfig();
+const configuredReviewers = findConfiguredCodexReviewers(
+  config,
+  resolveReviewerBackend,
+);
+const reviewers = configuredReviewers.flatMap(({ id, binary }) => {
+  try {
+    const resolvedBinary = resolveExecutablePath(binary);
+    const probe = spawnSync(resolvedBinary, ["--version"], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    if (probe.status !== 0) return [];
+    const version = (probe.stdout || probe.stderr).trim().split(/\r?\n/)[0];
+    return [{ id, binary: resolvedBinary, version }];
+  } catch {
+    return [];
+  }
+});
+if (reviewers.length === 0) process.exit(1);
+process.stdout.write(`${JSON.stringify(reviewers, null, 2)}\n`);
+NODE
+  then
+    echo "ASSERTION FAILED: real mode requires a codex reviewer backed by the codex binary" >&2
+    exit 1
+  fi
 fi
 
 echo "==> scaffolding scratch project"
@@ -99,9 +144,11 @@ echo "// scratch" > "$E2E_DIR/project/util.js"
 
 PROMPT="Produce a short implementation plan (under 15 lines) to add a hello() \
 function returning the string 'hello' to util.js. When the plan is ready, \
-finish planning. If plan review feedback arrives, address it and finish again."
+include the exact marker '$RUN_TOKEN' in its heading and finish planning. \
+If plan review feedback arrives, address it and finish again."
 
 echo "==> running headless Claude Code (plan mode, haiku)"
+touch "$PROOF_MARKER"
 set +e
 (cd "$E2E_DIR/project" && claude -p "$PROMPT" \
   --settings "$E2E_DIR/settings.json" \
@@ -134,9 +181,23 @@ if (!Array.isArray(state.approved_hashes) || state.approved_hashes.length === 0)
 if (!Number.isInteger(state.rounds_used) || state.rounds_used !== 0) process.exit(1);
 if (!Array.isArray(state.denied) || state.denied.length === 0) process.exit(1);
 ' "$STATE_FILE" || fail "plan-gate state does not record the deny/approve loop"
+else
+  SESSIONS_DIR="${HOME}/.inspectrum/sessions"
+  REAL_PROOFS_FILE="$E2E_DIR/real-codex-proofs.txt"
+  node "$REPO_DIR/scripts/e2e-gate-proof.mjs" \
+    "$SESSIONS_DIR" "$PROOF_MARKER" "$RUN_TOKEN" "$CODEX_REVIEWERS_FILE" \
+    > "$REAL_PROOFS_FILE" \
+    || fail "unable to inspect real Codex review sessions"
+  REAL_CODEX_PROOFS=$(wc -l < "$REAL_PROOFS_FILE" | tr -d ' ')
+  [ "$REAL_CODEX_PROOFS" -gt 0 ] || fail \
+    "real Codex produced no attributable review session; the gate may only have failed open"
 fi
 
 grep -q '"result"' "$E2E_DIR/claude-result.json" || fail "claude produced no result JSON"
 
 FAILED=0
-echo "==> e2e plan-gate: PASS (bounce + approve loop verified)"
+if [ -z "${INSPECTRUM_E2E_CODEX:-}" ]; then
+  echo "==> e2e plan-gate: PASS (bounce + approve loop verified)"
+else
+  echo "==> e2e plan-gate: PASS (real Codex review session verified: $REAL_CODEX_PROOFS)"
+fi
