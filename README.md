@@ -21,6 +21,14 @@ The problem isn't that your agent plans badly — it's that **nobody checks the 
 
 **inspectrum wires a rival LLM into your agent's plan mode.** When Claude Code finishes a plan, Codex (GPT) reviews it *before* the approval dialog reaches you. Findings bounce the plan back to Claude for revision — so the plan you finally approve has already survived a second opinion. (And if the reviewer can't run, the plan passes through with a warning, never blocked.)
 
+## When a skill is enough
+
+For an occasional second opinion, a rule can tell one agent to call another and compare the replies. That is a reasonable lightweight option.
+
+Inspectrum is for the repeatable checkpoint. In Claude Code, the plugin runs at the plan-to-execution boundary without relying on a remembered prompt, caps revision loops, and fails open on operational errors. Other local MCP hosts can call the same `review_plan` contract on demand. Both paths keep findings attributed, return a common verdict shape, preserve human control, and write local evidence for successful reviews.
+
+Recreating those guarantees with a skill means maintaining the orchestration, output validation, health checks, failure policy, and session record yourself.
+
 ## Quick start
 
 You need [Node 20+](https://nodejs.org), Claude Code, and Codex CLI >= 0.99.0 authenticated with a [ChatGPT subscription](https://chatgpt.com/pricing) (no API key):

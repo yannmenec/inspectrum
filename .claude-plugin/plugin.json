@@ -2,7 +2,7 @@
   "name": "inspectrum",
   "displayName": "Inspectrum",
   "version": "0.2.2",
-  "description": "Automatic Codex review of Claude Code plans before approval, plus /inspectrum:review on demand.",
+  "description": "Automatic, bounded, fail-open Codex review before Claude Code approval; final approval stays yours.",
   "author": { "name": "Yann Menec" },
   "homepage": "https://github.com/yannmenec/inspectrum",
   "repository": "https://github.com/yannmenec/inspectrum",
