@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Inspectrum icon</title>
+  <desc id="description">A magnifying lens crossing three cyan, violet and amber spectrum bands on a dark field.</desc>
+  <defs>
+    <linearGradient id="background" x1="52" y1="32" x2="460" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111D36"/>
+      <stop offset="1" stop-color="#050914"/>
+    </linearGradient>
+    <clipPath id="lens">
+      <circle cx="222" cy="214" r="132"/>
+    </clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#background)"/>
+  <g clip-path="url(#lens)" fill="none" stroke-linecap="round" stroke-width="30">
+    <path d="M40 312L404 102" stroke="#54E7F5"/>
+    <path d="M58 360L422 150" stroke="#9D7CFF"/>
+    <path d="M76 408L440 198" stroke="#FFBE55"/>
+  </g>
+  <circle cx="222" cy="214" r="132" fill="none" stroke="#F5F8FF" stroke-width="22"/>
+  <path d="M316 309L407 400" fill="none" stroke="#F5F8FF" stroke-linecap="round" stroke-width="34"/>
+  <circle cx="181" cy="169" r="14" fill="#F5F8FF"/>
+</svg>

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">Inspectrum social preview</title>
+  <desc id="description">Inspectrum wordmark beside a spectrum magnifying lens, with the message: Review the plan. Keep the human gate.</desc>
+  <defs>
+    <linearGradient id="background" x1="80" y1="40" x2="1160" y2="610" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101D36"/>
+      <stop offset="0.55" stop-color="#081122"/>
+      <stop offset="1" stop-color="#030610"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#BFD1FF" stroke-opacity="0.055"/>
+    </pattern>
+    <clipPath id="lens">
+      <circle cx="236" cy="295" r="128"/>
+    </clipPath>
+  </defs>
+  <rect width="1280" height="640" fill="url(#background)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <rect x="56" y="54" width="1168" height="532" rx="36" fill="none" stroke="#C9D7FF" stroke-opacity="0.16" stroke-width="2"/>
+  <g clip-path="url(#lens)" fill="none" stroke-linecap="round" stroke-width="29">
+    <path d="M70 385L402 193" stroke="#54E7F5"/>
+    <path d="M88 431L420 239" stroke="#9D7CFF"/>
+    <path d="M106 477L438 285" stroke="#FFBE55"/>
+  </g>
+  <circle cx="236" cy="295" r="128" fill="none" stroke="#F5F8FF" stroke-width="20"/>
+  <path d="M327 386L415 474" fill="none" stroke="#F5F8FF" stroke-linecap="round" stroke-width="31"/>
+  <circle cx="197" cy="252" r="13" fill="#F5F8FF"/>
+  <text x="492" y="177" fill="#68E7F2" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="24" font-weight="700" letter-spacing="4">PLAN REVIEW FOR CLAUDE CODE + CODEX</text>
+  <text x="486" y="302" fill="#F5F8FF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="94" font-weight="780" letter-spacing="-3">INSPECTRUM</text>
+  <text x="492" y="378" fill="#CBD7F3" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="38" font-weight="520">Review the plan. Keep the human gate.</text>
+  <g transform="translate(492 438)">
+    <rect width="170" height="52" rx="26" fill="#54E7F5" fill-opacity="0.12" stroke="#54E7F5" stroke-opacity="0.5"/>
+    <text x="85" y="34" text-anchor="middle" fill="#BFF8FC" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="650">ONE MCP TOOL</text>
+    <rect x="190" width="240" height="52" rx="26" fill="#9D7CFF" fill-opacity="0.12" stroke="#9D7CFF" stroke-opacity="0.5"/>
+    <text x="310" y="34" text-anchor="middle" fill="#D9CDFF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="650">BOUNDED FAIL-OPEN</text>
+    <rect x="450" width="250" height="52" rx="26" fill="#FFBE55" fill-opacity="0.12" stroke="#FFBE55" stroke-opacity="0.5"/>
+    <text x="575" y="34" text-anchor="middle" fill="#FFE1A8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="650">REPRODUCIBLE EVIDENCE</text>
+  </g>
+</svg>

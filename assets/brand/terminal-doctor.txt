@@ -1,0 +1,30 @@
+Inspectrum 0.2.1 fresh-install check
+Captured: 2026-07-14 (Europe/Paris)
+Command: npx -y inspectrum@0.2.1 doctor
+Context: empty working directory, empty HOME, freshly installed public Claude plugin;
+         existing Codex authentication referenced separately. Temporary path normalized.
+
+inspectrum doctor
+
+Runtime
+  ✅ Node 25.9.0
+
+Config
+  ✅ no config file (defaults applied)
+
+Sessions
+  ✅ $FRESH_HOME/.inspectrum/sessions — writable
+
+Reviewers
+  ✅ codex 0.144.2
+     model:  unset (codex default)
+     effort: unset (codex default)
+
+Optional reviewers
+  ⚠  claude — binary found but ANTHROPIC_API_KEY not set — reviews will fail unless claude has an OAuth login
+  ⚠  gemini — binary found but GEMINI_API_KEY or GOOGLE_API_KEY or GOOGLE_GENAI_USE_VERTEXAI not set — reviews will fail unless gemini has an OAuth login
+
+Claude Code plugin (optional for MCP-only users)
+  ✅ inspectrum@inspectrum 0.2.1
+
+✅ All checks passed
