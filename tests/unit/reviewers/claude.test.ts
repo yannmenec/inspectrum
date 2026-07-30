@@ -85,6 +85,23 @@ describe("ClaudeReviewer", () => {
     expect(result.findings[0]!.reviewer).toBe("my-claude");
   });
 
+  it("falls back to result when structured_output is null", async () => {
+    const envelope = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: JSON.stringify(validRawReview),
+      structured_output: null,
+    });
+    mockSpawn.mockReturnValue(makeMockProcess(envelope));
+    const reviewer = new ClaudeReviewer("claude", cfg);
+
+    const result = await reviewer.review("# Plan", "all");
+
+    expect(result.verdict).toBe("approve");
+    expect(result.summary).toBe("Looks good.");
+  });
+
   it("throws ReviewerError on is_error=true", async () => {
     const envelope = JSON.stringify({
       type: "result",
