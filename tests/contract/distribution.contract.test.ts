@@ -139,6 +139,10 @@ describe("distribution metadata", () => {
     expect(kit).toContain("## Channel 2 — Codex Git marketplace");
     expect(kit).toContain("codex plugin marketplace add yannmenec/inspectrum --ref main");
     expect(kit).toContain("does not by itself create a listing");
+    expect(kit).toContain("## Channel 3 — OpenAI Plugin Directory");
+    expect(kit).toContain("The viable central-directory route is **Skills only**");
+    expect(kit).toContain("five positive tests");
+    expect(kit).toContain("https://platform.openai.com/plugins");
     expect(kit).toContain("bounded, fail-open");
     expect(kit).toMatch(/attributed findings and one structured\s+verdict/);
     expect(pkg.description).toBe(
