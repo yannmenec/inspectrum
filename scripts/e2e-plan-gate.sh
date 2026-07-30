@@ -95,8 +95,9 @@ EOF
 else
   echo "==> INSPECTRUM_E2E_CODEX=1: using the real codex CLI"
   echo "==> validating the configured codex reviewer backend"
-  CODEX_REVIEWERS_FILE="$E2E_DIR/codex-reviewer-ids.txt"
+  CODEX_REVIEWERS_FILE="$E2E_DIR/codex-reviewers.json"
   if ! node --input-type=module - "$REPO_DIR" > "$CODEX_REVIEWERS_FILE" <<'NODE'
+import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const root = process.argv[2];
@@ -104,23 +105,38 @@ const { loadConfig } = await import(pathToFileURL(`${root}/dist/config.js`));
 const { resolveReviewerBackend } = await import(
   pathToFileURL(`${root}/dist/reviewers/common.js`)
 );
-const { findConfiguredCodexReviewerIds } = await import(
+const {
+  findConfiguredCodexReviewers,
+  resolveExecutablePath,
+} = await import(
   pathToFileURL(`${root}/scripts/e2e-gate-proof.mjs`)
 );
 const config = loadConfig();
-const reviewerIds = findConfiguredCodexReviewerIds(
+const configuredReviewers = findConfiguredCodexReviewers(
   config,
   resolveReviewerBackend,
 );
-if (reviewerIds.length === 0) process.exit(1);
-process.stdout.write(`${reviewerIds.join("\n")}\n`);
+const reviewers = configuredReviewers.flatMap(({ id, binary }) => {
+  try {
+    const resolvedBinary = resolveExecutablePath(binary);
+    const probe = spawnSync(resolvedBinary, ["--version"], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    if (probe.status !== 0) return [];
+    const version = (probe.stdout || probe.stderr).trim().split(/\r?\n/)[0];
+    return [{ id, binary: resolvedBinary, version }];
+  } catch {
+    return [];
+  }
+});
+if (reviewers.length === 0) process.exit(1);
+process.stdout.write(`${JSON.stringify(reviewers, null, 2)}\n`);
 NODE
   then
     echo "ASSERTION FAILED: real mode requires a codex reviewer backed by the codex binary" >&2
     exit 1
   fi
-  command -v codex > "$E2E_DIR/codex-path.txt"
-  codex --version > "$E2E_DIR/codex-version.txt"
 fi
 
 echo "==> scaffolding scratch project"

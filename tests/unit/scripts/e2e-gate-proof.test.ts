@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   rmSync,
   utimesSync,
   writeFileSync,
@@ -10,8 +12,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  findConfiguredCodexReviewerIds,
+  findConfiguredCodexReviewers,
   findRealCodexProofs,
+  resolveExecutablePath,
 } from "../../../scripts/e2e-gate-proof.mjs";
 
 const root = resolve(import.meta.dirname, "..", "..", "..");
@@ -165,8 +168,8 @@ describe("configured Codex reviewer discovery", () => {
       },
     };
 
-    expect(findConfiguredCodexReviewerIds(config, resolveBackend)).toEqual([
-      "codex-high",
+    expect(findConfiguredCodexReviewers(config, resolveBackend)).toEqual([
+      { id: "codex-high", binary: "/opt/homebrew/bin/codex" },
     ]);
   });
 
@@ -179,7 +182,7 @@ describe("configured Codex reviewer discovery", () => {
       },
     };
 
-    expect(findConfiguredCodexReviewerIds(config, resolveBackend)).toEqual([]);
+    expect(findConfiguredCodexReviewers(config, resolveBackend)).toEqual([]);
   });
 
   it("rejects a Codex backend configured with another binary", () => {
@@ -195,6 +198,16 @@ describe("configured Codex reviewer discovery", () => {
       },
     };
 
-    expect(findConfiguredCodexReviewerIds(config, resolveBackend)).toEqual([]);
+    expect(findConfiguredCodexReviewers(config, resolveBackend)).toEqual([]);
+  });
+
+  it("resolves the exact configured executable from the supplied PATH", () => {
+    const executable = join(tempDir, "codex");
+    writeFileSync(executable, "#!/bin/sh\n");
+    chmodSync(executable, 0o755);
+
+    expect(resolveExecutablePath("codex", tempDir)).toBe(
+      realpathSync(executable),
+    );
   });
 });

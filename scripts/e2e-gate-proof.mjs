@@ -1,24 +1,42 @@
+import { accessSync, constants, realpathSync } from "node:fs";
 import { access, readFile, readdir, stat } from "node:fs/promises";
-import { basename, resolve, join } from "node:path";
+import { basename, delimiter, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export function findConfiguredCodexReviewerIds(config, resolveBackend) {
+export function findConfiguredCodexReviewers(config, resolveBackend) {
   const activeIds = config.plan_gate?.reviewers
     ?? config.defaults?.reviewers
     ?? [];
 
-  return activeIds.filter((id) => {
-    if (!/^[A-Za-z0-9_-]+$/.test(id)) return false;
+  return activeIds.flatMap((id) => {
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) return [];
     const reviewer = config.reviewers?.[id];
     if (!reviewer || basename(reviewer.binary ?? "codex") !== "codex") {
-      return false;
+      return [];
     }
     try {
-      return resolveBackend(id, reviewer) === "codex";
+      return resolveBackend(id, reviewer) === "codex"
+        ? [{ id, binary: reviewer.binary ?? "codex" }]
+        : [];
     } catch {
-      return false;
+      return [];
     }
   });
+}
+
+export function resolveExecutablePath(binary, pathValue = process.env.PATH ?? "") {
+  const candidates = binary.includes("/")
+    ? [binary]
+    : pathValue.split(delimiter).map((dir) => join(dir || ".", binary));
+  for (const candidate of candidates) {
+    try {
+      accessSync(candidate, constants.X_OK);
+      return realpathSync(candidate);
+    } catch {
+      // Try the next PATH entry.
+    }
+  }
+  throw new Error(`Executable not found: ${binary}`);
 }
 
 export async function findRealCodexProofs({
@@ -86,9 +104,10 @@ if (isMain) {
     process.exitCode = 2;
   } else {
     try {
-      const reviewerIds = (await readFile(reviewerIdsPath, "utf8"))
-        .split(/\r?\n/)
-        .filter(Boolean);
+      const configuredReviewers = JSON.parse(
+        await readFile(reviewerIdsPath, "utf8"),
+      );
+      const reviewerIds = configuredReviewers.map((reviewer) => reviewer.id);
       const proofs = await findRealCodexProofs({
         sessionsDir,
         markerPath,
