@@ -1,6 +1,6 @@
 <div align="center">
 
-# inspectrum
+# Inspectrum
 
 ### Catch the bad plan before your agent spends the tokens.
 

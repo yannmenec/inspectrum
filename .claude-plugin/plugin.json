@@ -1,5 +1,6 @@
 {
   "name": "inspectrum",
+  "displayName": "Inspectrum",
   "version": "0.2.2",
   "description": "Automatic Codex review of Claude Code plans before approval, plus /inspectrum:review on demand.",
   "author": { "name": "Yann Menec" },
