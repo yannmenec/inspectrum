@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.yannmenec/inspectrum",
   "title": "Inspectrum",
-  "description": "Review coding-agent plans with peer models and return attributed findings plus a structured verdict.",
+  "description": "Review coding-agent plans on demand with peer models, attributed findings, and a structured verdict.",
   "repository": {
     "url": "https://github.com/yannmenec/inspectrum",
     "source": "github",
