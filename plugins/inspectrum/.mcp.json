@@ -2,6 +2,6 @@
   "inspectrum": {
     "command": "npx",
     "args": ["-y", "inspectrum@0.2.2"],
-    "tool_timeout_sec": 300
+    "tool_timeout_sec": 330
   }
 }

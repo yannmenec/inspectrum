@@ -5,33 +5,32 @@ workflow: send the current Codex development plan to Claude through
 Inspectrum's existing `review_plan` MCP tool.
 
 The plugin does not add a tool or change the server architecture. Its bundled
-MCP configuration starts the candidate package with:
+MCP configuration starts the public package with:
 
 ```text
 npx -y inspectrum@0.2.2
 ```
 
 The package selector must match `package.json`; the contract test fails if the
-two versions drift.
+two versions drift. Codex allows the MCP call 330 seconds: Inspectrum keeps its
+300-second reviewer limit and Codex has 30 seconds to start the server and
+return the result.
 
 ## Public installation
 
-The public installation smoke test is currently **blocked**. npm and the public
-GitHub release still expose `0.2.1`, while this plugin belongs to the `0.2.2`
-candidate. Do not install the older public package as a silent fallback.
-
-After `0.2.2` is published to npm and this marketplace is merged into `main`,
-verify the exact package first:
+Version `0.2.2` is public on npm and GitHub. Verify the exact package:
 
 ```bash
 npm view inspectrum@0.2.2 version
 npx -y inspectrum@0.2.2 doctor
 ```
 
-Both commands must resolve `0.2.2`. Then install the repository marketplace
-and plugin:
+Both commands must resolve `0.2.2`. If an older manual MCP registration already
+uses the name `inspectrum`, remove it before installing the plugin; otherwise
+the duplicate name can hide the plugin's bundled server:
 
 ```bash
+codex mcp remove inspectrum
 codex plugin marketplace add yannmenec/inspectrum --ref main
 codex plugin add inspectrum@inspectrum
 ```
@@ -42,10 +41,20 @@ Restart Codex and use a new task so the skill and MCP server are loaded. Ask:
 Review this plan with Claude using Inspectrum.
 ```
 
-## Validation before publication
+On the first call, Codex asks whether the `inspectrum` MCP server may run
+`review_plan`. Choose **Allow for this session** to continue without granting a
+permanent permission. This interactive authorization is expected; a first call
+from non-interactive `codex exec` can be cancelled because nobody can answer
+the prompt.
 
-Before the npm package exists, validate the local candidate rather than
-claiming a public end-to-end success:
+The public end-to-end smoke test completed successfully on 0.2.2: Codex invoked
+`review_plan`, Claude returned a structured `revise` verdict in 46.3 seconds,
+and Inspectrum wrote the local session. The user remained in control of the
+review and no repository file was changed by the smoke task.
+
+## Validation
+
+Validate repository changes with:
 
 ```bash
 npm ci
@@ -56,11 +65,8 @@ npm run test:coverage
 npm test -- tests/contract/codex-plugin.contract.test.ts
 ```
 
-The repository build and tests run the local `0.2.2` source. The targeted
-contract validates the Codex manifest, marketplace entry, pinned MCP package,
-reviewer direction, and failure semantics. The committed plugin launcher
-itself cannot complete its public npm smoke test until `inspectrum@0.2.2` is
-published.
+The targeted contract validates the Codex manifest, marketplace entry, pinned
+MCP package, reviewer direction, activation guidance, and failure semantics.
 
 ## Failure and privacy
 
