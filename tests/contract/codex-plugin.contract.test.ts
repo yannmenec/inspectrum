@@ -55,6 +55,7 @@ describe("Codex plugin positive contracts", () => {
     expect(servers.inspectrum).toEqual({
       command: "npx",
       args: ["-y", `inspectrum@${String(pkg.version)}`],
+      tool_timeout_sec: 300,
     });
   });
 
