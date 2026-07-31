@@ -55,6 +55,7 @@ describe("Codex plugin positive contracts", () => {
     expect(servers.inspectrum).toEqual({
       command: "npx",
       args: ["-y", `inspectrum@${String(pkg.version)}`],
+      tool_timeout_sec: 330,
     });
   });
 
@@ -69,14 +70,16 @@ describe("Codex plugin positive contracts", () => {
     expect(skill).toContain("report_markdown");
   });
 
-  it("documents local installation and the blocked public smoke test", () => {
+  it("documents public installation and first-use activation", () => {
     const guide = readFileSync(resolve(root, "docs", "codex-plugin-claude-plan-review.md"), "utf8");
 
     expect(guide).toContain("codex plugin marketplace add");
     expect(guide).toContain("codex plugin add inspectrum@inspectrum");
     expect(guide).toContain("new task");
     expect(guide).toContain(`inspectrum@${String(pkg.version)}`);
-    expect(guide).toContain("blocked");
+    expect(guide).toContain("Allow for this session");
+    expect(guide).toContain("codex mcp remove inspectrum");
+    expect(guide).toContain("46.3 seconds");
     expect(guide).toContain("npm");
   });
 });
