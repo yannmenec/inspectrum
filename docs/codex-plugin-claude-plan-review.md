@@ -12,9 +12,9 @@ npx -y inspectrum@0.2.2
 ```
 
 The package selector must match `package.json`; the contract test fails if the
-two versions drift. Codex allows the MCP call 330 seconds: Inspectrum keeps its
-300-second reviewer limit and Codex has 30 seconds to start the server and
-return the result.
+two versions drift. Codex allows the MCP call 330 seconds: Inspectrum's default
+reviewer limit is 300 seconds, leaving 30 seconds for aggregation, session
+writing, and result delivery. The MCP server startup has a separate timeout.
 
 ## Public installation
 
