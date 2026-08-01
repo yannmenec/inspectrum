@@ -110,6 +110,14 @@ Codex, Cursor, Gemini CLI) who wants to stop copy-pasting plans between them.
 - To propose updates: open a PR on `agent/propose-<topic>` with a single commit and a one-paragraph rationale.
 - Auto-memory may live outside the repo (e.g. `~/.claude/projects/**`); never inside it.
 
+## GitHub delivery protocol
+
+- Write all GitHub-facing titles, bodies, comments, reviews, labels, field values, and handoffs in English.
+- Start from the assigned issue, its parent Outcome, and Project fields; GitHub holds delivery state while this repository holds code, specifications, and decisions.
+- On every issue or PR a durable AI session creates or materially changes, add `AI session: <Harness> | ID: <session-id> | Model: <resolved-model> | Effort: <resolved-effort> | Role: <role>`; never guess values or paste transcripts/secrets.
+- Put full provenance and the handoff on the session's primary item; other touched items use the compact line and link back. One parent-Outcome summary covers field-only weekly batches.
+- At a material boundary publish `Result`, `Evidence`, `Blocker`, and one `Next action`, then update the shared GitHub state.
+
 ## When in doubt
 
 - Read first (`Read`, `grep`, `rg`). Do not invent file paths, function names, or library APIs.
