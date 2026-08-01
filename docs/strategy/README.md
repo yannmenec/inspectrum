@@ -38,12 +38,12 @@ plus d'autorité d'exécution.
 
 | Canal | État au 1er août 2026 |
 |---|---|
-| npm | disponible en version 0.2.2 |
-| GitHub | dépôt et release 0.2.2 disponibles |
-| MCP Registry | version 0.2.2 disponible |
+| npm | disponible en version 0.2.3 |
+| GitHub | dépôt, release et plugins 0.2.3 disponibles |
+| MCP Registry | peut encore afficher la version 0.2.2 ; aucune republication tentée |
 | Glama | fiche Inspectrum disponible |
-| Claude Community | soumission en attente |
-| PulseMCP | aucune fiche Inspectrum observée |
+| Claude Community | absent du catalogue public vérifié |
+| PulseMCP | non revérifié : le site a répondu HTTP 403 |
 
 ## Portefeuille fermé
 

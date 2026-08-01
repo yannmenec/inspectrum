@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title description">
-  <title id="title">Fresh Inspectrum doctor output</title>
-  <desc id="description">A rendered excerpt of a real terminal transcript. The published Inspectrum 0.2.1 package reports Node, default config, writable sessions, Codex 0.144.2, plugin 0.2.1 and all checks passed.</desc>
+  <title id="title">Inspectrum 0.2.3 public activation proof</title>
+  <desc id="description">Rendered excerpt of a real public Inspectrum 0.2.3 run: doctor passed with optional-reviewer warnings in 3.17 seconds, then Codex rejected an unsafe migration plan in 50.80 seconds.</desc>
   <defs>
     <linearGradient id="page" x1="90" y1="35" x2="1190" y2="690" gradientUnits="userSpaceOnUse">
       <stop stop-color="#14213D"/>
@@ -16,26 +16,27 @@
   <circle cx="112" cy="85" r="9" fill="#FF6B6B"/>
   <circle cx="142" cy="85" r="9" fill="#FFBE55"/>
   <circle cx="172" cy="85" r="9" fill="#54D98C"/>
-  <text x="640" y="92" text-anchor="middle" fill="#8695B5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">actual output excerpt · 2026-07-14</text>
-  <g xml:space="preserve" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22">
-    <text x="112" y="156" fill="#7EE8F2">$</text>
-    <text x="142" y="156" fill="#E7ECF8">npx -y inspectrum@0.2.1 doctor</text>
-    <text x="112" y="204" fill="#F5F8FF" font-size="27" font-weight="700">inspectrum doctor</text>
-    <text x="112" y="246" fill="#91A0BE">Runtime</text>
-    <text x="146" y="280" fill="#6FE09A">✓</text>
-    <text x="180" y="280" fill="#DDE6F7">Node 25.9.0</text>
-    <text x="112" y="318" fill="#91A0BE">Config</text>
-    <text x="146" y="352" fill="#6FE09A">✓</text>
-    <text x="180" y="352" fill="#DDE6F7">no config file (defaults applied)</text>
-    <text x="112" y="390" fill="#91A0BE">Reviewers</text>
-    <text x="146" y="424" fill="#6FE09A">✓</text>
-    <text x="180" y="424" fill="#DDE6F7">codex 0.144.2</text>
-    <text x="180" y="458" fill="#DDE6F7">model:  unset (codex default)</text>
-    <text x="180" y="492" fill="#DDE6F7">effort: unset (codex default)</text>
-    <text x="112" y="530" fill="#91A0BE">Claude Code plugin</text>
-    <text x="146" y="564" fill="#6FE09A">✓</text>
-    <text x="180" y="564" fill="#DDE6F7">inspectrum@inspectrum 0.2.1</text>
-    <rect x="112" y="588" width="1056" height="50" rx="12" fill="#54D98C" fill-opacity="0.11" stroke="#54D98C" stroke-opacity="0.35"/>
-    <text x="146" y="620" fill="#7CF0A9" font-weight="700">✓ All checks passed</text>
+  <text x="640" y="92" text-anchor="middle" fill="#8695B5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">actual public output excerpt · 2026-08-01</text>
+  <g xml:space="preserve" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="21">
+    <text x="112" y="154" fill="#7EE8F2">$</text>
+    <text x="142" y="154" fill="#E7ECF8">npx -y inspectrum@0.2.3 doctor</text>
+    <text x="112" y="196" fill="#F5F8FF" font-size="26" font-weight="700">inspectrum doctor</text>
+    <text x="146" y="236" fill="#6FE09A">✓</text>
+    <text x="180" y="236" fill="#DDE6F7">Node 25.9.0</text>
+    <text x="146" y="272" fill="#6FE09A">✓</text>
+    <text x="180" y="272" fill="#DDE6F7">codex 0.146.0-alpha.3.1 · effort high</text>
+    <text x="146" y="308" fill="#6FE09A">✓</text>
+    <text x="180" y="308" fill="#DDE6F7">inspectrum@inspectrum 0.2.3</text>
+    <text x="146" y="344" fill="#FFCE6A">⚠</text>
+    <text x="180" y="344" fill="#FFE1A0">Checks passed with optional-reviewer warnings</text>
+    <text x="180" y="380" fill="#91A0BE">cold npx + doctor: 3.17 s</text>
+    <path d="M112 414H1168" stroke="#AFC4F5" stroke-opacity="0.18"/>
+    <text x="112" y="458" fill="#7EE8F2">review_plan</text>
+    <text x="262" y="458" fill="#E7ECF8">test fixture · reviewer codex · no judge</text>
+    <text x="112" y="504" fill="#FF8585" font-size="26" font-weight="700">REJECT · 1 blocker · 4 majors · 50.80 s</text>
+    <text x="112" y="548" fill="#F5F8FF">New code reads handle before it exists;</text>
+    <text x="112" y="582" fill="#F5F8FF">the migration drops username before code stops using it.</text>
+    <rect x="112" y="606" width="1056" height="38" rx="10" fill="#7EE8F2" fill-opacity="0.08" stroke="#7EE8F2" stroke-opacity="0.28"/>
+    <text x="132" y="632" fill="#9AEFF5" font-size="18">Measured executable time through first real result: 55.62 s</text>
   </g>
 </svg>

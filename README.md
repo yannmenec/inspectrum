@@ -41,11 +41,17 @@ Inspectrum is for the repeatable checkpoint. In Claude Code, the plugin runs at 
 Recreating those guarantees with a skill means maintaining the orchestration, output validation, health checks, failure policy, and session record yourself.
 
 Public availability as of 1 August 2026:
-[npm 0.2.2](https://www.npmjs.com/package/inspectrum/v/0.2.2),
-[GitHub release](https://github.com/yannmenec/inspectrum/releases/tag/v0.2.2),
-[MCP Registry](https://registry.modelcontextprotocol.io/), and
-[Glama](https://glama.ai/mcp/servers/yannmenec/inspectrum). The Claude Community
-submission is pending, and Inspectrum is not listed on PulseMCP.
+[npm 0.2.3](https://www.npmjs.com/package/inspectrum/v/0.2.3), the
+[GitHub release](https://github.com/yannmenec/inspectrum/releases/tag/v0.2.3),
+and the repository's Claude and Codex plugins are aligned on 0.2.3.
+[Glama](https://glama.ai/mcp/servers/yannmenec/inspectrum) is public. The MCP
+Registry may still show 0.2.2; it was not republished in this pass. Inspectrum
+was not in the public Claude Community catalog, while PulseMCP blocked the
+one-time recheck with HTTP 403, so no current PulseMCP listing claim is made.
+
+The [public 0.2.3 activation evidence](docs/activation/README.md) records exact
+commands, timings, one useful finding, one null result, one visible fail-open
+case, and the limits of the measurement.
 
 ## Quick start
 
