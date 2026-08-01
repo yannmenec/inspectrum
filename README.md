@@ -2,7 +2,7 @@
 
 # Inspectrum
 
-### Catch the bad plan before your agent spends the tokens.
+### Independent review before a risky agent change becomes hard to undo.
 
 [![CI](https://github.com/yannmenec/inspectrum/actions/workflows/ci.yml/badge.svg)](https://github.com/yannmenec/inspectrum/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/inspectrum.svg)](https://www.npmjs.com/package/inspectrum)
@@ -15,11 +15,22 @@
 
 ---
 
-Every AI coding disaster starts the same way: a plausible plan, approved in three seconds.
+A plausible plan can commit an agent to a migration, authentication change,
+payment flow, compatibility break, or deployment that is expensive to undo.
 
-The problem isn't that your agent plans badly — it's that **nobody checks the plan**. You skim it, hit approve, and find out 40 minutes and 200k tokens later that step 2 was wrong. Asking the same model to review its own plan doesn't help: same model, same blind spots, same miss — twice.
+**Inspectrum is an independent pre-flight check before that decision.** Its
+first automatic integration runs when Claude Code exits plan mode: Codex (GPT)
+reviews the plan before the approval dialog reaches you, findings can send the
+plan back for revision, and you keep final approval. If the reviewer cannot
+run, the plan passes through with a visible warning instead of being silently
+reported as reviewed.
 
-**Inspectrum wires a rival LLM into your agent's plan mode.** When Claude Code finishes a plan, Codex (GPT) reviews it *before* the approval dialog reaches you. Findings bounce the plan back to Claude for revision — so the plan you finally approve has already survived a second opinion. (And if the reviewer can't run, the plan passes through with a warning, never blocked.)
+Here, independent means a reviewer distinct from the author model, invoked
+separately. It does not mean their errors are statistically independent.
+Inspectrum makes the checkpoint repeatable and its failures visible; **a net
+reliability gain and a defensible moat are not yet proven**. The
+[post-0.2.2 strategy](docs/strategy/README.md) defines the evidence gates and
+keeps code review, pull-request review, and pair programming out of scope.
 
 ## When a skill is enough
 
@@ -28,6 +39,13 @@ For an occasional second opinion, a rule can tell one agent to call another and 
 Inspectrum is for the repeatable checkpoint. In Claude Code, the plugin runs at the plan-to-execution boundary without relying on a remembered prompt, caps revision loops, and fails open on operational errors. Other local MCP hosts can call the same `review_plan` contract on demand. Both paths keep findings attributed, return a common verdict shape, preserve human control, and write local evidence for successful reviews.
 
 Recreating those guarantees with a skill means maintaining the orchestration, output validation, health checks, failure policy, and session record yourself.
+
+Public availability as of 1 August 2026:
+[npm 0.2.2](https://www.npmjs.com/package/inspectrum/v/0.2.2),
+[GitHub release](https://github.com/yannmenec/inspectrum/releases/tag/v0.2.2),
+[MCP Registry](https://registry.modelcontextprotocol.io/), and
+[Glama](https://glama.ai/mcp/servers/yannmenec/inspectrum). The Claude Community
+submission is pending, and Inspectrum is not listed on PulseMCP.
 
 ## Quick start
 
@@ -61,7 +79,7 @@ No prompt to remember, no button, zero tokens spent on triggering. The gate is a
 <summary>Prefer the agent to install and check everything for you? Paste this into Claude Code.</summary>
 
 ````text
-Set up inspectrum's Codex plan gate. Use normal approvals only — do not
+Set up Inspectrum's Codex plan gate. Use normal approvals only — do not
 switch to Bypass Permissions or Full Access.
 
 Steps:
@@ -83,7 +101,7 @@ Steps:
        `osascript -e 'tell application "Terminal" to do script "codex"'`
      Then tell me: "A Terminal window opened with codex running.
      Inside that window, click 'Sign in with ChatGPT', complete the
-     login in my browser, then close the Terminal window. inspectrum
+     login in my browser, then close the Terminal window. Inspectrum
      is then ready."
 
 Do NOT use sudo, edit shell profiles, push git changes, read .env or
@@ -119,11 +137,13 @@ Built to be **boring and safe**:
 - **Read-only reviewer.** Codex runs in a pinned read-only sandbox (`codex exec -s read-only --ephemeral`), and sandbox-weakening flags in your config are stripped. The reviewer reads; it doesn't write.
 - **Kill switch.** `[plan_gate] enabled = false` in `~/.inspectrum/config.toml`, or disable the plugin per project.
 
-## Why a rival model?
+## Why a separate reviewer?
 
-- **Plans are leverage.** A flaw caught at plan time costs a paragraph. The same flaw caught at PR time costs a rewrite.
-- **Self-review is an echo chamber.** The model that wrote the plan is the least qualified to find its blind spots.
-- **Claude and GPT disagree usefully.** Different training, different failure modes, different objections. That disagreement is the product.
+- **Plans are leverage.** A flaw caught before execution can be cheaper to fix than the same flaw found after a difficult-to-reverse change.
+- **Separation makes the check inspectable.** The author and reviewer run independently, and findings remain attributed.
+- **Cross-provider value is a hypothesis.** Claude and GPT can raise different
+  objections, but Inspectrum has not yet proved that this produces a net
+  reliability gain after false positives, triage, cost, and latency.
 - **Use an existing subscription.** No separate API bill when using your ChatGPT subscription; reviews consume your existing Codex subscription allowance. API-key backends are billed by their provider.
 
 ## What's in the box
@@ -131,7 +151,7 @@ Built to be **boring and safe**:
 | | |
 |---|---|
 | 🚦 **Plan gate** | Every Claude Code plan reviewed by Codex before it reaches you — automatic, max 2 revision rounds |
-| 🔍 **On-demand review** | `/inspectrum:review` or "Review this plan with inspectrum" from any MCP host |
+| 🔍 **On-demand review** | `/inspectrum:review` or "Review this plan with Inspectrum" from any MCP host |
 | 🧑‍⚖️ **Multi-reviewer + judge** | Run codex + gemini + claude in parallel; a judge consolidates into one verdict |
 | 📋 **One verdict** | `approve / revise / reject` + findings by severity, with reviewer attribution |
 | 🗂️ **Session logs** | Markdown record of every review — verdict, findings, revised plan — under `~/.inspectrum/sessions/` (0700 perms) |
@@ -152,7 +172,7 @@ Built to be **boring and safe**:
 Paste this into the Codex app or CLI:
 
 ````text
-Set up inspectrum so I can review my plans with Claude. Use normal
+Set up Inspectrum so I can review my plans with Claude. Use normal
 approvals only.
 
 Steps:
@@ -172,10 +192,10 @@ Steps:
      `osascript -e 'tell application "Terminal" to do script "claude"'`
    Then tell me:
    - "If claude shows its chat prompt, you're already logged in —
-     close the Terminal window. inspectrum is ready."
+     close the Terminal window. Inspectrum is ready."
    - "If claude shows /login or opens a browser, complete the sign-in
      with your Claude account, then close the Terminal window.
-     inspectrum is then ready."
+     Inspectrum is then ready."
    (The ⚠ claude line in the doctor stays even after login because
    claude doesn't expose a status command we can detect — harmless.)
 
@@ -282,7 +302,7 @@ To the reviewer(s) you configured, and to a local session log under `~/.inspectr
 
 ## Troubleshooting
 
-**`sh: inspectrum: command not found` / `claude mcp list` shows `✗ Failed to connect` — but only when your current directory is the inspectrum repo itself.** `npx inspectrum@<version>` resolves the spec against the *local* package when cwd is inside a package named `inspectrum` whose version matches, and a package's own bin is never self-linked into its `node_modules/.bin`. The published package is fine. Fixes: run from any other directory, or install the real binary once and register that instead:
+**`sh: inspectrum: command not found` / `claude mcp list` shows `✗ Failed to connect` — but only when your current directory is the Inspectrum repo itself.** `npx inspectrum@<version>` resolves the spec against the *local* package when cwd is inside a package named `inspectrum` whose version matches, and a package's own bin is never self-linked into its `node_modules/.bin`. The published package is fine. Fixes: run from any other directory, or install the real binary once and register that instead:
 
 ```bash
 npm install -g inspectrum
@@ -295,7 +315,7 @@ claude mcp add --transport stdio --scope user inspectrum -- inspectrum
 
 <div align="center">
 
-**If inspectrum caught a bad plan for you, [star the repo ⭐](https://github.com/yannmenec/inspectrum) — it's how other agent-wranglers find it.**
+**If Inspectrum caught a bad plan for you, [star the repo ⭐](https://github.com/yannmenec/inspectrum) — it's how other agent-wranglers find it.**
 
 MIT — [Yann Menec](https://github.com/yannmenec). Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md).
 

@@ -122,9 +122,16 @@ describe("distribution metadata", () => {
       resolve(root, "docs/distribution/0.2.2-submission-kit.md"),
       "utf8",
     );
+    const strategy = readFileSync(resolve(root, "docs/strategy/README.md"), "utf8");
 
     expect(readme).toContain("## When a skill is enough");
-    expect(readme).toContain("**Inspectrum wires a rival LLM");
+    expect(readme).toContain(
+      "**Inspectrum is an independent pre-flight check before that decision.**",
+    );
+    expect(readme).toContain("reliability gain and a defensible moat are not yet proven");
+    expect(readme).toContain(
+      "keeps code review, pull-request review, and pair programming out of scope",
+    );
     expect(readme).toContain(
       "For an occasional second opinion, a rule can tell one agent to call another",
     );
@@ -144,7 +151,14 @@ describe("distribution metadata", () => {
     expect(kit).toContain("five positive tests");
     expect(kit).toContain("https://platform.openai.com/plugins");
     expect(kit).toContain("bounded, fail-open");
+    expect(kit).toContain("It has no\nproved moat.");
     expect(kit).toMatch(/attributed findings and one structured\s+verdict/);
+    expect(strategy).toContain(
+      "Ni le gain net de fiabilité, ni un avantage durable difficile\nà reproduire ne sont prouvés",
+    );
+    expect(strategy).toContain(
+      "La revue de code, la revue de pull request et le pair programming ne sont pas\ndes extensions autorisées",
+    );
     expect(pkg.description).toBe(
       "Automatic Codex plan review in Claude Code; on-demand in local MCP hosts; human approval stays yours",
     );
