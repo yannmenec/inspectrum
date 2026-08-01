@@ -1,8 +1,13 @@
-Inspectrum 0.2.1 fresh-install check
-Captured: 2026-07-14 (Europe/Paris)
-Command: npx -y inspectrum@0.2.1 doctor
-Context: empty working directory, empty HOME, freshly installed public Claude plugin;
-         existing Codex authentication referenced separately. Temporary path normalized.
+Inspectrum 0.2.3 public activation check
+Captured: 2026-08-01 (Europe/Paris)
+Context: empty working directory outside the repository, fresh npm cache;
+         existing Node, Claude Code, Codex CLI, reviewer logins, and user
+         Inspectrum config were reused. Home paths were normalized; no
+         credentials or private plans are shown. The npm update notice was
+         omitted. Doctor warnings, measured timings, its exit code, and the
+         fixture path are preserved.
+
+$ npx -y inspectrum@0.2.3 doctor
 
 inspectrum doctor
 
@@ -10,21 +15,60 @@ Runtime
   ✅ Node 25.9.0
 
 Config
-  ✅ no config file (defaults applied)
+  ✅ $USER_HOME/.inspectrum/config.toml — valid
 
 Sessions
-  ✅ $FRESH_HOME/.inspectrum/sessions — writable
+  ✅ $USER_HOME/.inspectrum/sessions — writable
 
 Reviewers
-  ✅ codex 0.144.2
-     model:  unset (codex default)
-     effort: unset (codex default)
+  ✅ codex 0.146.0-alpha.3.1
+     model:  gpt-5.6-sol (~/.codex/config.toml)
+     effort: high (~/.inspectrum/config.toml)
 
 Optional reviewers
   ⚠  claude — binary found but ANTHROPIC_API_KEY not set — reviews will fail unless claude has an OAuth login
   ⚠  gemini — binary found but GEMINI_API_KEY or GOOGLE_API_KEY or GOOGLE_GENAI_USE_VERTEXAI not set — reviews will fail unless gemini has an OAuth login
 
 Claude Code plugin (optional for MCP-only users)
-  ✅ inspectrum@inspectrum 0.2.1
+  ✅ inspectrum@inspectrum 0.2.3
 
-✅ All checks passed
+⚠ Checks passed with warnings
+
+exit 0
+real 3.17
+
+$ claude mcp add --transport stdio --scope project inspectrum -- npx -y inspectrum@0.2.3
+Added stdio MCP server inspectrum with command: npx -y inspectrum@0.2.3 to project config
+real 0.42
+
+$ claude mcp get inspectrum
+Status: ✓ Connected
+Command: npx
+Args: -y inspectrum@0.2.3
+real 1.16
+
+$ codex -c 'mcp_servers.inspectrum.command="npx"' \
+  -c 'mcp_servers.inspectrum.args=["-y","inspectrum@0.2.3"]' mcp get inspectrum
+inspectrum
+  enabled: true
+  transport: stdio
+  command: npx
+  args: -y inspectrum@0.2.3
+real 0.07
+
+First real MCP review
+Plan: tests/fixtures/plans/missing-rollback.md
+Input type: Inspectrum test fixture purpose-built for blocker/major findings
+Arguments: reviewers=["codex"], focus="all", judge=false
+Elapsed: 50.80 s
+Tools exposed: review_plan
+
+REJECT: 1 blocker, 4 majors
+Blocker: Migration Steps 1-3 are not mutually compatible as written. Step 1
+deploys code that reads both username and handle before handle exists, while
+Step 2 drops username before Step 3 removes the application's dependency on it.
+
+Session: 206a6e9a
+Measured executable time through first result: 55.62 s
+Limits: prepared/authenticated machine; excludes prerequisite installs,
+        sign-in, reading, typing, and human approval.

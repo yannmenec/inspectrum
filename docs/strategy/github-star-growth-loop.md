@@ -101,12 +101,12 @@ concours sans rapport avec le produit.
 
 ### État public au 1er août 2026
 
-- npm 0.2.2 et la release GitHub sont disponibles ;
-- le MCP Registry et Glama référencent Inspectrum ;
-- la soumission Claude Community est en attente ;
-- PulseMCP ne référence pas encore Inspectrum ;
-- la capture terminal reste une preuve 0.2.1 et ne doit pas être présentée
-  comme une preuve 0.2.2.
+- npm, la release GitHub et les plugins publics sont alignés sur 0.2.3 ;
+- Glama référence Inspectrum ; le MCP Registry peut encore afficher 0.2.2 ;
+- Inspectrum n'apparaît pas dans le catalogue public Claude Community ;
+- PulseMCP n'a pas pu être revérifié, car le site a répondu HTTP 403 ;
+- la capture terminal est une preuve publique 0.2.3 sur machine déjà préparée,
+  pas une preuve d'activation par un utilisateur recruté à froid.
 
 ### J0 à J2
 

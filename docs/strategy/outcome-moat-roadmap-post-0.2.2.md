@@ -338,12 +338,13 @@ contrat, les mêmes preuves et le même actif de calibration.
 
 ## État au 1er août et prochains pas
 
-1. npm 0.2.2, la release GitHub, le MCP Registry et Glama sont disponibles ;
-2. Claude Community reste en attente et PulseMCP reste absent ;
-3. remplacer la capture terminal 0.2.1 seulement par une preuve publique 0.2.2
-   reproductible ;
-4. exécuter `doctor` et un checkpoint non artificiel hors checkout ;
-5. publier la démonstration, le cas réel et le résultat nul ;
+1. npm, la release GitHub et les plugins publics sont alignés sur 0.2.3 ;
+2. Glama est public, le MCP Registry peut encore afficher 0.2.2, Claude
+   Community ne liste pas Inspectrum et PulseMCP n'a pas pu être revérifié ;
+3. la preuve 0.2.3 hors checkout, la démonstration, le cas utile, le résultat
+   nul et la dégradation visible sont publiés dans `docs/activation/` ;
+4. exécuter le protocole d'activation externe sans inventer de participants ;
+5. publier ensuite les résultats bruts et les abandons ;
 6. aligner description GitHub et catalogues quand leur statut change ;
 7. lancer la boucle GitHub décrite dans
    [github-star-growth-loop.md](github-star-growth-loop.md) ;
