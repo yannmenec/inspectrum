@@ -143,7 +143,7 @@ Built to be **boring and safe**:
 |------------|--------------|-------|
 | **Claude Code** | Codex (GPT) | Plugin — 2 commands above |
 | **Codex app / CLI** | Claude | `codex mcp add inspectrum -- npx -y inspectrum@latest` + config below |
-| **Claude Desktop** (macOS) | Codex (GPT) | Download [`inspectrum-0.2.2.mcpb`](https://github.com/yannmenec/inspectrum/releases/download/v0.2.2/inspectrum-0.2.2.mcpb), open, confirm. The earlier v0.2.0 bundle was incomplete — use the v0.2.2 asset, not npm/stdio. |
+| **Claude Desktop** (macOS) | Codex (GPT) | Download [`inspectrum-0.2.3.mcpb`](https://github.com/yannmenec/inspectrum/releases/download/v0.2.3/inspectrum-0.2.3.mcpb), open, confirm. The earlier v0.2.0 bundle was incomplete — use the v0.2.3 asset, not npm/stdio. |
 | **Cursor** | Codex (GPT) | [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.png)](https://cursor.com/en/install-mcp?name=inspectrum&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImluc3BlY3RydW1AbGF0ZXN0Il19) |
 
 <details>
