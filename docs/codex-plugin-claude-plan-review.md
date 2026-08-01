@@ -8,7 +8,7 @@ The plugin does not add a tool or change the server architecture. Its bundled
 MCP configuration starts the public package with:
 
 ```text
-npx -y inspectrum@0.2.2
+npx -y inspectrum@0.2.3
 ```
 
 The package selector must match `package.json`; the contract test fails if the
@@ -18,14 +18,14 @@ writing, and result delivery. The MCP server startup has a separate timeout.
 
 ## Public installation
 
-Version `0.2.2` is public on npm and GitHub. Verify the exact package:
+For version `0.2.3`, verify the exact package after it is published:
 
 ```bash
-npm view inspectrum@0.2.2 version
-npx -y inspectrum@0.2.2 doctor
+npm view inspectrum@0.2.3 version
+npx -y inspectrum@0.2.3 doctor
 ```
 
-Both commands must resolve `0.2.2`. If an older manual MCP registration already
+Both commands must resolve `0.2.3`. If an older manual MCP registration already
 uses the name `inspectrum`, remove it before installing the plugin; otherwise
 the duplicate name can hide the plugin's bundled server:
 

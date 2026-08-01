@@ -9,6 +9,10 @@ vi.mock("../../src/reviewers/health.js", () => ({
   checkClaudePlugin: vi.fn(),
 }));
 
+vi.mock("../../src/version.js", () => ({
+  getPackageVersion: () => "9.9.9",
+}));
+
 vi.mock("../../src/config.js", () => ({
   loadConfig: vi.fn(),
   getConfigPath: vi.fn().mockReturnValue("/home/test/.inspectrum/config.toml"),
@@ -18,6 +22,7 @@ vi.mock("../../src/config.js", () => ({
     },
     defaults: { reviewers: ["claude"], judge: "claude", focus: "all" },
     limits: { report_max_chars: 8000, timeout_seconds: 60 },
+    plan_gate: { enabled: true, max_rounds: 2, reason_max_chars: 3000 },
     version: 1,
   },
 }));
@@ -37,6 +42,7 @@ const HEALTHY_CONFIG = {
   },
   defaults: { reviewers: ["claude"], judge: "claude", focus: "all" as const },
   limits: { report_max_chars: 8000, timeout_seconds: 60 },
+  plan_gate: { enabled: true, max_rounds: 2, reason_max_chars: 3000 },
   version: 1,
 };
 
@@ -59,7 +65,7 @@ describe("runDoctor", () => {
     mockFs.mkdirSync.mockReturnValue(undefined);
     mockFs.accessSync.mockReturnValue(undefined);
     mockCheckReviewer.mockResolvedValue({ ok: true });
-    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "0.2.1" });
+    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "9.9.9" });
   });
 
   it("returns true when config valid, sessions writable, all reviewers ok", async () => {
@@ -163,6 +169,49 @@ describe("runDoctor", () => {
     expect(result).toBe(true);
     expect(output).toContain("installed but disabled");
     expect(output).toContain("claude plugin enable inspectrum@inspectrum");
+  });
+
+  it("fails when an active plan gate plugin pins a different package version", async () => {
+    mockLoadConfig.mockReturnValue(HEALTHY_CONFIG);
+    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "0.2.0" });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(false);
+    expect(output).toContain("automatic plan gate uses inspectrum@0.2.0");
+    expect(output).toContain("this doctor uses inspectrum@9.9.9");
+    expect(output).toContain("claude plugin marketplace remove inspectrum");
+    expect(output).toContain("claude plugin marketplace add yannmenec/inspectrum");
+    expect(output).toContain("claude plugin install inspectrum@inspectrum");
+    expect(output).toContain("Some checks failed");
+    expect(output).not.toContain("All checks passed");
+  });
+
+  it("warns without failing when versions drift but the plan gate is disabled", async () => {
+    mockLoadConfig.mockReturnValue({
+      ...HEALTHY_CONFIG,
+      plan_gate: { ...HEALTHY_CONFIG.plan_gate, enabled: false },
+    });
+    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "0.2.0" });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(true);
+    expect(output).toContain("automatic plan gate uses inspectrum@0.2.0");
+    expect(output).toContain("plan gate is disabled");
+    expect(output).toContain("Checks passed with warnings");
+    expect(output).not.toContain("All checks passed");
+  });
+
+  it("passes when the active plugin and package versions match", async () => {
+    mockLoadConfig.mockReturnValue(HEALTHY_CONFIG);
+    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "9.9.9" });
+
+    const result = await runDoctor();
+
+    expect(result).toBe(true);
+    expect(output).toContain("inspectrum@inspectrum 9.9.9");
+    expect(output).toContain("All checks passed");
   });
 
   it("handles multiple reviewers — partial failure returns false", async () => {
@@ -438,7 +487,7 @@ describe("runDoctor codex runtime display", () => {
     mockFs.accessSync.mockReturnValue(undefined);
     mockFs.readFileSync.mockImplementation(() => { throw new Error("ENOENT"); });
     mockCheckReviewer.mockResolvedValue({ ok: true });
-    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "0.2.1" });
+    mockCheckClaudePlugin.mockReturnValue({ ok: true, version: "9.9.9" });
   });
 
   afterEach(() => {

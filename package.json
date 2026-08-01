@@ -1,6 +1,6 @@
 {
   "name": "inspectrum",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Automatic Codex plan review in Claude Code; on-demand in local MCP hosts; human approval stays yours",
   "type": "module",
   "bin": {

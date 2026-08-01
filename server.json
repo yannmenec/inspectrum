@@ -8,14 +8,14 @@
     "source": "github",
     "id": "1242227459"
   },
-  "version": "0.2.2",
+  "version": "0.2.3",
   "websiteUrl": "https://github.com/yannmenec/inspectrum/blob/main/docs/claude-code-codex-plan-review.md",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "inspectrum",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "transport": {
         "type": "stdio"
       }

@@ -5,6 +5,7 @@ import TOML from "@iarna/toml";
 import { checkClaudePlugin, checkReviewer } from "./reviewers/health.js";
 import { resolveReviewerBackend } from "./reviewers/common.js";
 import { loadConfig, getConfigPath, defaultConfig } from "./config.js";
+import { getPackageVersion } from "./version.js";
 import type { Config } from "./config.js";
 import type { ReviewerConfig } from "./schemas.js";
 
@@ -61,8 +62,13 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
   const B = useColor ? "\x1b[1m"  : "";
   const Z = useColor ? "\x1b[0m"  : "";
 
+  let hasWarnings = false;
+
   const pass    = (label: string) => process.stdout.write(`  ${G}✅${Z} ${label}\n`);
-  const warn    = (label: string) => process.stdout.write(`  ${Y}⚠${Z}  ${label}\n`);
+  const warn    = (label: string) => {
+    hasWarnings = true;
+    process.stdout.write(`  ${Y}⚠${Z}  ${label}\n`);
+  };
   const failMsg = (label: string) => process.stdout.write(`  ${R}❌${Z} ${label}\n`);
   const hint    = (text: string)  => process.stdout.write(`     ${text}\n`);
   const section = (title: string) => process.stdout.write(`\n${B}${title}${Z}\n`);
@@ -169,14 +175,26 @@ export async function runDoctor(configPath?: string): Promise<boolean> {
   section("Claude Code plugin (optional for MCP-only users)");
   const plugin = checkClaudePlugin();
   const pluginLabel = `inspectrum@inspectrum${plugin.version ? ` ${plugin.version}` : ""}`;
+  const packageVersion = getPackageVersion();
   if (plugin.warning || !plugin.ok) warn(`${pluginLabel}${plugin.warning ? ` — ${plugin.warning}` : ""}`);
-  else pass(pluginLabel);
+  else if (plugin.version && plugin.version !== packageVersion) {
+    const mismatch = `${pluginLabel} — version mismatch: automatic plan gate uses inspectrum@${plugin.version}; this doctor uses inspectrum@${packageVersion}`;
+    if (config.plan_gate.enabled) {
+      failMsg(mismatch);
+      allOk = false;
+    } else {
+      warn(`${mismatch} — plan gate is disabled`);
+    }
+    hint("Fix: claude plugin uninstall inspectrum@inspectrum && claude plugin marketplace remove inspectrum");
+    hint("Then: claude plugin marketplace add yannmenec/inspectrum && claude plugin install inspectrum@inspectrum");
+  } else pass(pluginLabel);
   if (plugin.fix) hint(`Fix: ${plugin.fix}`);
 
   // Summary
   process.stdout.write("\n");
   if (allOk) {
-    process.stdout.write(`${G}✅ All checks passed${Z}\n\n`);
+    if (hasWarnings) process.stdout.write(`${Y}⚠ Checks passed with warnings${Z}\n\n`);
+    else process.stdout.write(`${G}✅ All checks passed${Z}\n\n`);
   } else {
     process.stdout.write(`${R}❌ Some checks failed${Z}\n\n`);
   }

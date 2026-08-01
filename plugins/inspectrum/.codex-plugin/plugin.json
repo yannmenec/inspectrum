@@ -1,6 +1,6 @@
 {
   "name": "inspectrum",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Review Codex plans with Claude through Inspectrum's existing MCP tool.",
   "author": {
     "name": "Yann Menec",
