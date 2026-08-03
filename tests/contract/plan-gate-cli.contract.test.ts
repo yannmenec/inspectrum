@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -69,5 +69,26 @@ describe("plan-gate CLI bounded stdin", () => {
       timeout: 5_000,
     });
     expectCliFailOpen(result);
+  });
+
+  // The gate must stay fail-open on an invalid config (AGENTS.md invariant), and the
+  // reason it reports must be the readable config error, not a raw ZodError dump (#67).
+  it("fails open with a readable reason when the config is invalid (#67)", () => {
+    const home = mkdtempSync(join(tmpdir(), "inspectrum-cli-home-"));
+    tempDirs.push(home);
+    mkdirSync(join(home, ".inspectrum"), { recursive: true });
+    writeFileSync(join(home, ".inspectrum", "config.toml"), '[reviewers.codex]\ntype = "nonsense"\n');
+    const result = spawnSync(process.execPath, ["--import", "tsx/esm", "src/cli.ts", "plan-gate"], {
+      cwd: repoRoot,
+      env: { ...process.env, HOME: home },
+      input: JSON.stringify({ tool_name: "ExitPlanMode", tool_input: { plan: "# Plan" } }),
+      encoding: "utf8",
+      timeout: 15_000,
+    });
+
+    expectCliFailOpen(result);
+    const decision = PreToolUseDecisionSchema.parse(JSON.parse(String(result.stdout)));
+    expect(decision.systemMessage).toContain("reviewers.codex.type");
+    expect(decision.systemMessage).not.toContain("ZodError");
   });
 });
