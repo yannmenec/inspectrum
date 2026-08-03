@@ -75,7 +75,7 @@
     "lefthook": "^2.1.6",
     "nock": "^14.0.14",
     "tsx": "^4.20.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
   "overrides": {
