@@ -10,7 +10,9 @@
 #   INSPECTRUM_E2E_CODEX=1 bash scripts/...  # real codex CLI (needs login)
 #   INSPECTRUM_E2E_KEEP=1 bash scripts/...   # keep proof artifacts on success
 #
-# Uses your real Claude Code auth/config; only the hook comes from --settings.
+# Uses your real Claude Code auth (macOS Keychain), but a throwaway Claude Code
+# config dir, so the probe sessions this harness spawns never land in your real
+# session index. Only the hook comes from --settings.
 # Gate state/sessions land in ~/.inspectrum/ keyed by the fresh session id.
 set -euo pipefail
 
@@ -20,6 +22,10 @@ CALLS_DIR="$E2E_DIR/calls"
 PROOF_MARKER="$E2E_DIR/review-start.marker"
 RUN_TOKEN="inspectrum-e2e-$(date +%s)-$$"
 FAILED=1
+
+# Resolve the developer's real session index BEFORE redirecting CLAUDE_CONFIG_DIR,
+# so the final assertion can prove this run added nothing to it.
+USER_PROJECTS_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
 
 cleanup() {
   if [ "$FAILED" -eq 0 ]; then
@@ -34,10 +40,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$CALLS_DIR" "$E2E_DIR/bin" "$E2E_DIR/project"
+mkdir -p "$CALLS_DIR" "$E2E_DIR/bin" "$E2E_DIR/project" "$E2E_DIR/claude-config"
+
+# Redirect every Claude Code session this harness spawns into a throwaway config
+# dir, so its transcripts never reach the developer's ~/.claude/projects (and
+# therefore never surface as fake projects/probe sessions in the app sidebar).
+# CLAUDE_SECURESTORAGE_CONFIG_DIR="" keeps the Keychain credential lookup on the
+# default entry: without it, a custom CLAUDE_CONFIG_DIR derives a per-dir
+# Keychain service name and the CLI reports "Not logged in".
+export CLAUDE_CONFIG_DIR="$E2E_DIR/claude-config"
+export CLAUDE_SECURESTORAGE_CONFIG_DIR=""
 
 echo "==> preflight: headless claude auth"
-if ! claude -p "Reply with exactly: OK" --model haiku > "$E2E_DIR/preflight.json" 2>&1; then
+if ! claude -p "Reply with exactly: $RUN_TOKEN" --model haiku > "$E2E_DIR/preflight.json" 2>&1; then
   echo "SKIP: headless 'claude -p' cannot authenticate on this machine (see $E2E_DIR/preflight.json)." >&2
   echo "Run this harness from a terminal where 'claude -p' works (claude setup-token)." >&2
   FAILED=1
@@ -194,6 +209,14 @@ else
 fi
 
 grep -q '"result"' "$E2E_DIR/claude-result.json" || fail "claude produced no result JSON"
+
+# Both probes this harness spawns carry RUN_TOKEN, so a single grep proves none
+# of their transcripts reached the developer's session index. Never echo the
+# token itself: the surrounding session would record it and self-trip this check.
+if [ -d "$USER_PROJECTS_DIR" ] && grep -rlqF -- "$RUN_TOKEN" "$USER_PROJECTS_DIR" 2>/dev/null; then
+  fail "harness sessions leaked into the user session index at $USER_PROJECTS_DIR"
+fi
+echo "==> user session index untouched: $USER_PROJECTS_DIR"
 
 FAILED=0
 if [ -z "${INSPECTRUM_E2E_CODEX:-}" ]; then
