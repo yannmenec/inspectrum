@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { loadConfig } from "./config.js";
+import { loadConfigOrExit } from "./config.js";
 import { getPackageVersion } from "./version.js";
 import { listSessions } from "./session/store.js";
 import { buildSessionsIndex } from "./session/resources.js";
@@ -19,7 +19,7 @@ const server = new McpServer(
   { capabilities: { tools: {}, resources: {} } },
 );
 
-const config = loadConfig();
+const config = loadConfigOrExit();
 
 server.registerTool(
   "review_plan",

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -86,5 +87,35 @@ describe.skipIf(!HAS_DIST)("MCP server — stdio e2e smoke", () => {
     await expect(
       client.readResource({ uri: "inspectrum://sessions/abcd1234/../etc/passwd" }),
     ).rejects.toThrow();
+  });
+});
+
+// #67: an invalid ~/.inspectrum/config.toml killed the server with an unhandled
+// ZodError, leaving "Server disconnected" as the host's only diagnostic. Startup
+// must fail closed with a message that is legible in a raw MCP host log.
+describe.skipIf(!HAS_DIST)("MCP server — invalid config startup (#67)", () => {
+  it("exits 1 with a readable message and no stack trace", () => {
+    const home = mkdtempSync(join(tmpdir(), "inspectrum-e2e-badconfig-"));
+    try {
+      mkdirSync(join(home, ".inspectrum"), { recursive: true });
+      writeFileSync(join(home, ".inspectrum", "config.toml"), '[reviewers.codex]\ntype = "nonsense"\n');
+      const result = spawnSync(process.execPath, [DIST_SERVER], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+        input: "",
+        encoding: "utf8",
+        timeout: 15_000,
+      });
+
+      expect(result.status).toBe(1);
+      const stderr = String(result.stderr);
+      expect(stderr).toContain(join(home, ".inspectrum", "config.toml"));
+      expect(stderr).toContain("reviewers.codex.type");
+      expect(stderr).toContain('"nonsense"');
+      expect(stderr).not.toContain("ZodError");
+      expect(stderr).not.toContain("    at ");
+      expect(stderr).not.toMatch(/^Node\.js v/m);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
