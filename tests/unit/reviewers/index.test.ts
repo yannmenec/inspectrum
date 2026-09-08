@@ -9,6 +9,7 @@ import {
   KimiReviewer,
   QwenReviewer,
   MuseReviewer,
+  OpencodeReviewer,
 } from "../../../src/reviewers/index.js";
 import { runBackendJsonReview } from "../../../src/reviewers/common.js";
 
@@ -171,5 +172,24 @@ describe("createReviewer — muse", () => {
   it("infers muse from the binary basename", () => {
     const reviewer = createReviewer("reviewer-a", { type: "cli", binary: "/Users/x/.local/bin/muse" });
     expect(reviewer).toBeInstanceOf(MuseReviewer);
+  });
+});
+
+describe("createReviewer — opencode", () => {
+  it("returns an OpencodeReviewer for opencode cli config", () => {
+    const reviewer = createReviewer("opencode", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(OpencodeReviewer);
+    expect(reviewer.id).toBe("opencode");
+  });
+
+  it("honors an explicit opencode backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "opencode", binary: "/opt/oc" });
+    expect(reviewer).toBeInstanceOf(OpencodeReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers opencode from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-b", { type: "cli", binary: "/Users/x/.opencode/bin/opencode" });
+    expect(reviewer).toBeInstanceOf(OpencodeReviewer);
   });
 });

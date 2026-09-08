@@ -14,7 +14,8 @@ export type ReviewerBackend =
   | "openrouter"
   | "kimi"
   | "qwen"
-  | "muse";
+  | "muse"
+  | "opencode";
 
 const PLAN_MAX_CHARS = 16000;
 export const TRUNCATION_MARKER = "\n\n[...truncated]";
@@ -144,12 +145,12 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
   if (idBackend) return idBackend;
 
   throw new ReviewerOperationalError(
-    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, ollama (http), openrouter (http).`,
+    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, opencode, ollama (http), openrouter (http).`,
   );
 }
 
 function backendFromName(name: string): ReviewerBackend | undefined {
-  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse"] as const;
+  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse", "opencode"] as const;
   return (known as readonly string[]).includes(name) ? (name as ReviewerBackend) : undefined;
 }
 
@@ -173,6 +174,7 @@ export async function runBackendJsonReview(opts: {
   if (opts.backend === "qwen") return runQwenJsonReview(opts);
   if (opts.backend === "gemini") return runGeminiJsonReview(opts);
   if (opts.backend === "muse") return runMuseJsonReview(opts);
+  if (opts.backend === "opencode") return runOpencodeJsonReview(opts);
   return assertUnhandledBackend(opts.backend);
 }
 
@@ -512,6 +514,52 @@ async function runMuseJsonReview(opts: {
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+}
+
+const OPENCODE_RESERVED: ReservedFlags = {
+  // `run` is the subcommand we always inject. --auto broadens permissions, and
+  // --format json switches stdout to a raw event stream instead of our object.
+  bool: ["run", "--auto", "-c", "--continue", "--share", "-i", "--interactive"],
+  // --agent carries the confinement (see below) and must not be overridden.
+  paired: ["--agent", "-m", "--model", "--variant", "--format", "-s", "--session", "--command"],
+};
+
+/**
+ * opencode (`opencode run`) reviewer.
+ *
+ * Confinement: `--agent summary` is pinned. Verified against the real CLI — the
+ * default `build` agent ran a shell command from prompt text and wrote outside
+ * the repo, while `summary` (whose permission set ends in
+ * {"permission":"*","action":"deny"}) refused the same prompt and still returned
+ * a well-formed review. The plan under review is untrusted input, so the
+ * reviewer must not be able to run tools.
+ *
+ * Verified: opencode reads the prompt from stdin, prints bare JSON on stdout and
+ * keeps its decorative banner on stderr. `--format json` is NOT used: it emits a
+ * stream of raw events rather than the review object.
+ */
+async function runOpencodeJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "opencode";
+  const model = extractModel(opts.config);
+  const userArgs = mergeReviewerArgs(opts.config.args, OPENCODE_RESERVED);
+  const args = [
+    "run",
+    "--agent",
+    "summary",
+    ...(model ? ["-m", model] : []),
+    ...(opts.config.effort ? ["--variant", opts.config.effort] : []),
+    ...userArgs,
+  ];
+  const stdin = `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`;
+  const { stdout } = await spawnCollect({ binary, args, stdin, timeoutMs: opts.timeoutMs, label: opts.label });
+  return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
 }
 
 async function runQwenJsonReview(opts: {

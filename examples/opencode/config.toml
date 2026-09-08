@@ -1,0 +1,29 @@
+# inspectrum — opencode reviewer example
+#
+# Requires the opencode CLI on PATH with at least one authenticated provider
+# (`opencode providers login`). Verify with: inspectrum doctor
+#
+# Canonical invocation:
+#   opencode run --agent summary [-m <provider/model>] [--variant <effort>]
+#   with the prompt on stdin.
+#
+# --agent summary is pinned for confinement: its permission set ends in
+# {"permission":"*","action":"deny"}, so a plan under review cannot make the
+# reviewer run shell commands. The default `build` agent CAN and does.
+# --agent, --auto and --format are dropped from `args`.
+
+[defaults]
+reviewers = ["opencode"]
+judge     = "codex"
+
+[reviewers.opencode]
+type   = "cli"
+binary = "opencode"
+# model  = "google/gemini-2.5-flash"  # -m; provider/model. Omit to use opencode's default.
+# effort = "high"                     # passed as --variant (provider-specific)
+# timeout_seconds = 300
+
+# Multi-reviewer with a judge:
+# [defaults]
+# reviewers = ["opencode", "muse", "codex"]
+# judge     = "codex"

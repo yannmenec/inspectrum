@@ -7,6 +7,7 @@ import { OpenRouterReviewer } from "./openrouter.js";
 import { KimiReviewer } from "./kimi.js";
 import { QwenReviewer } from "./qwen.js";
 import { MuseReviewer } from "./muse.js";
+import { OpencodeReviewer } from "./opencode.js";
 import { assertUnhandledBackend, resolveReviewerBackend } from "./common.js";
 
 export interface Reviewer {
@@ -25,6 +26,7 @@ export function createReviewer(id: string, config: ReviewerConfig, limits?: Conf
   if (backend === "qwen") return new QwenReviewer(id, config, timeoutMs);
   if (backend === "gemini") return new GeminiReviewer(id, config, timeoutMs);
   if (backend === "muse") return new MuseReviewer(id, config, timeoutMs);
+  if (backend === "opencode") return new OpencodeReviewer(id, config, timeoutMs);
   return assertUnhandledBackend(backend);
 }
 
@@ -37,4 +39,5 @@ export {
   KimiReviewer,
   QwenReviewer,
   MuseReviewer,
+  OpencodeReviewer,
 };
