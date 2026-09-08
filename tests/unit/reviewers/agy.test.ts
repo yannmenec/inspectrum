@@ -3,12 +3,22 @@ import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 
 vi.mock("node:child_process");
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    mkdtempSync: vi.fn(() => "/tmp/inspectrum-agy-private"),
+    rmSync: vi.fn(),
+  };
+});
 
 import * as childProcess from "node:child_process";
+import * as fs from "node:fs";
 import { AgyReviewer } from "../../../src/reviewers/agy.js";
 import type { ReviewerConfig } from "../../../src/schemas.js";
 
 const mockSpawn = vi.mocked(childProcess.spawn);
+const mockRmSync = vi.mocked(fs.rmSync);
 
 function makeMockProcess(stdout: string, exitCode = 0): ChildProcess {
   const proc = new EventEmitter() as ChildProcess;
@@ -233,5 +243,33 @@ describe("AgyReviewer — reserved flags", () => {
     mockSpawn.mockReturnValue(makeMockProcess(envelope()));
     await new AgyReviewer("agy", { ...cfg, args: ["--json-schema", "{}"] }).review("# Plan", "all");
     expect(argsOf().filter((a) => a === "--json-schema")).toHaveLength(1);
+  });
+});
+
+describe("AgyReviewer — cwd isolation", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  // Regression (review): agy spawns with no cwd, so the child inherited the MCP
+  // host's working directory — in practice the user's own repo. agy is also the
+  // backend with the weakest confinement, so it must not start out inside real
+  // code. muse/grok/codex already spawn in a throwaway temp cwd.
+  it("spawns agy in a throwaway temp directory, never the host cwd", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(envelope()));
+    await new AgyReviewer("agy", cfg).review("# Plan", "all");
+    const spawnOptions = mockSpawn.mock.calls[0]![2];
+    expect(spawnOptions).toMatchObject({ cwd: "/tmp/inspectrum-agy-private" });
+    expect(spawnOptions?.cwd).not.toBe(process.cwd());
+  });
+
+  it("removes the temp directory after a successful run", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(envelope()));
+    await new AgyReviewer("agy", cfg).review("# Plan", "all");
+    expect(mockRmSync).toHaveBeenCalledWith("/tmp/inspectrum-agy-private", { recursive: true, force: true });
+  });
+
+  it("removes the temp directory when the reviewer fails", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess("", 1));
+    await expect(new AgyReviewer("agy", cfg).review("# Plan", "all")).rejects.toThrow(/exited with code 1/i);
+    expect(mockRmSync).toHaveBeenCalledWith("/tmp/inspectrum-agy-private", { recursive: true, force: true });
   });
 });

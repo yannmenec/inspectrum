@@ -483,11 +483,17 @@ async function runKimiJsonReview(opts: {
 
 /**
  * Extracts the review from kimi's JSONL stream. Verified shape: a
- * `{role:"meta",type:"system.version"}` line, one `{role:"assistant",content}`
- * line carrying the review, and a closing `session.resume_hint` meta line.
+ * `{role:"meta",type:"system.version"}` line, assistant line(s) carrying
+ * content, and a closing `session.resume_hint` meta line.
+ *
+ * The LAST assistant content line wins, not the first: kimi may emit several
+ * assistant events before the final answer (a streamed partial, a tool
+ * narration), and picking the first would return a truncated or non-JSON
+ * fragment. Any assistant line that carries the review parses on its own.
  */
 function parseKimiStreamJson(raw: string, reviewerId: string, label: string): RawReview {
   const lines = raw.trim().split("\n").filter((l) => l.trim() !== "");
+  let lastAssistantContent: string | undefined;
   for (const line of lines) {
     let parsed: unknown;
     try {
@@ -497,12 +503,15 @@ function parseKimiStreamJson(raw: string, reviewerId: string, label: string): Ra
     }
     const event = parsed as { role?: unknown; content?: unknown };
     if (event.role === "assistant" && typeof event.content === "string") {
-      return parseRawReview(stripJsonPayload(event.content), reviewerId, label);
+      lastAssistantContent = event.content;
     }
   }
-  throw new ReviewerOperationalError(
-    `${label} reviewer produced no assistant message: ${raw.slice(0, 200)}`,
-  );
+  if (lastAssistantContent === undefined) {
+    throw new ReviewerOperationalError(
+      `${label} reviewer produced no assistant message: ${raw.slice(0, 200)}`,
+    );
+  }
+  return parseRawReview(stripJsonPayload(lastAssistantContent), reviewerId, label);
 }
 
 const MUSE_RESERVED: ReservedFlags = {
@@ -589,6 +598,13 @@ const OPENCODE_RESERVED: ReservedFlags = {
  * a well-formed review. The plan under review is untrusted input, so the
  * reviewer must not be able to run tools.
  *
+ * `summary` is a BUILT-IN agent, not something from user config: a clean
+ * opencode install ships it (`opencode agent list` shows `summary (primary)`),
+ * so the pin resolves on any machine and cannot be silently overridden by a
+ * user-defined agent of the same name. (User agents live under
+ * ~/.config/opencode/agent/ and are listed alongside, but summary is not one of
+ * them.)
+ *
  * Verified: opencode reads the prompt from stdin, prints bare JSON on stdout and
  * keeps its decorative banner on stderr. `--format json` is NOT used: it emits a
  * stream of raw events rather than the review object.
@@ -604,17 +620,25 @@ async function runOpencodeJsonReview(opts: {
   const binary = opts.config.binary ?? "opencode";
   const model = extractModel(opts.config);
   const userArgs = mergeReviewerArgs(opts.config.args, OPENCODE_RESERVED);
-  const args = [
-    "run",
-    "--agent",
-    "summary",
-    ...(model ? ["-m", model] : []),
-    ...(opts.config.effort ? ["--variant", opts.config.effort] : []),
-    ...userArgs,
-  ];
-  const stdin = `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`;
-  const { stdout } = await spawnCollect({ binary, args, stdin, timeoutMs: opts.timeoutMs, label: opts.label });
-  return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+  // Throwaway cwd (same reasoning as agy/codex): the `summary` agent denies
+  // tool use, but the child must not inherit the host's working directory on
+  // the off-chance a permission ever slips through.
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-opencode-"));
+  try {
+    const args = [
+      "run",
+      "--agent",
+      "summary",
+      ...(model ? ["-m", model] : []),
+      ...(opts.config.effort ? ["--variant", opts.config.effort] : []),
+      ...userArgs,
+    ];
+    const stdin = `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`;
+    const { stdout } = await spawnCollect({ binary, args, stdin, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 const AGY_RESERVED: ReservedFlags = {
@@ -629,6 +653,16 @@ const AGY_RESERVED: ReservedFlags = {
  *
  * `--effort` is passed ONLY when configured: a real run of `agy --effort high`
  * with no model failed with "--effort is not supported for the current model".
+ *
+ * CONFINEMENT (verified on agy 1.1.27, do not "fix" without re-probing): agy has
+ * NO flag that confines it. `--sandbox` did not stop a write to /tmp; `--mode
+ * plan` did not stop one either — with the canonical flags the CLI itself warns
+ * "--mode plan has no effect while slash command expansion is disabled", and
+ * WITHOUT `--disable-slash-commands` the write still happened (agy: "/plan mode
+ * ... does not restrict my ability to run shell commands or write files"). The
+ * reviewer is spawned in a throwaway temp cwd (below) and the README + doctor
+ * warn that agy reviews must not come from an untrusted source — prefer muse,
+ * opencode or grok for that case.
  *
  * Output is a proprietary envelope — {conversation_id, status, response,
  * structured_output, ...} — sharing no field names with Claude's, hence its own
@@ -647,20 +681,28 @@ async function runAgyJsonReview(opts: {
   const binary = opts.config.binary ?? "agy";
   const model = extractModel(opts.config);
   const userArgs = mergeReviewerArgs(opts.config.args, AGY_RESERVED);
-  const args = [
-    "-p",
-    `${opts.systemPrompt}\n\n${opts.userMessage}`,
-    "--disable-slash-commands",
-    ...(model ? ["--model", model] : []),
-    ...(opts.config.effort ? ["--effort", opts.config.effort] : []),
-    ...userArgs,
-    "--json-schema",
-    RAW_REVIEW_JSON_SCHEMA,
-    "--output-format",
-    "json",
-  ];
-  const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label });
-  return parseAgyOutput(stdout, opts.reviewerId, opts.label);
+  // Throwaway cwd: without it the child inherits the MCP host's working
+  // directory (often the user's own repo). A plan under review is untrusted
+  // input; a write-capable reviewer must not start out inside real code.
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-agy-"));
+  try {
+    const args = [
+      "-p",
+      `${opts.systemPrompt}\n\n${opts.userMessage}`,
+      "--disable-slash-commands",
+      ...(model ? ["--model", model] : []),
+      ...(opts.config.effort ? ["--effort", opts.config.effort] : []),
+      ...userArgs,
+      "--json-schema",
+      RAW_REVIEW_JSON_SCHEMA,
+      "--output-format",
+      "json",
+    ];
+    const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseAgyOutput(stdout, opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 function parseAgyOutput(raw: string, reviewerId: string, label: string): RawReview {
