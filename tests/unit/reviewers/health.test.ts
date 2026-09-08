@@ -238,7 +238,10 @@ describe("checkReviewer — CLI", () => {
       mockExecFileSync.mockReturnValue("gemini 1.0");
       process.env["GOOGLE_GENAI_USE_VERTEXAI"] = "1";
       const result = await checkReviewer("gemini", { type: "cli", binary: "gemini" });
-      expect(result).toEqual({ ok: true });
+      expect(result.ok).toBe(true);
+      // Asserts the absence of an AUTH warning specifically. gemini also carries a
+      // deprecation warning (migrate to agy), which is unrelated to auth detection.
+      expect(result.warning ?? "").not.toMatch(/GEMINI_API_KEY|GOOGLE_API_KEY|OAuth login/);
     });
 
     it("does not warn for backends not in the CLI_REVIEWER_ENV map (e.g. kimi)", async () => {

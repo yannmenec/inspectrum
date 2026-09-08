@@ -13,6 +13,15 @@ export interface HealthResult {
 
 export const MIN_CODEX_VERSION = "0.99.0";
 
+/**
+ * Backends kept working but scheduled for removal. `doctor` surfaces the notice
+ * as a warning so users can migrate before the adapter is deleted; a deprecated
+ * backend is NOT unhealthy, so `ok` stays true and `allOk` is unaffected.
+ */
+const DEPRECATED_BACKENDS: Record<string, string> = {
+  gemini: "the gemini harness is deprecated and will be removed — migrate to the agy backend",
+};
+
 // Env vars each CLI backend will look for when actually invoked. Entries are
 // alternatives — if any one is set to a truthy value, auth is presumed present.
 // Backends not in this map (e.g. ollama, local CLIs) are not checked.
@@ -105,12 +114,15 @@ function checkCli(id: string, binary: string): HealthResult {
   }
 
   const versionDetails = version ? { version } : {};
+  const deprecation = DEPRECATED_BACKENDS[id];
   // Binary appears to exist. Warn if the peer-LLM auth env var is missing AND we can't detect
   // an interactive OAuth login — Desktop MCP hosts often don't propagate API keys.
   const envs = CLI_REVIEWER_ENV[id];
   if (envs && !envs.some((k) => !!process.env[k])) {
     const oauthStatus = getOauthStatus(id, binary);
-    if (oauthStatus === "logged-in") return { ok: true, ...versionDetails };
+    if (oauthStatus === "logged-in") {
+      return { ok: true, ...versionDetails, ...(deprecation ? { warning: deprecation } : {}) };
+    }
     if (id === "codex" && oauthStatus === "logged-out") {
       return {
         ok: false,
@@ -120,13 +132,14 @@ function checkCli(id: string, binary: string): HealthResult {
       };
     }
     const envList = envs.length === 1 ? envs[0] : envs.join(" or ");
+    const authWarning = `binary found but ${envList} not set — reviews will fail unless ${binary} has an OAuth login`;
     return {
       ok: true,
-      warning: `binary found but ${envList} not set — reviews will fail unless ${binary} has an OAuth login`,
+      warning: deprecation ? `${authWarning}; ${deprecation}` : authWarning,
       ...versionDetails,
     };
   }
-  return { ok: true, ...versionDetails };
+  return { ok: true, ...versionDetails, ...(deprecation ? { warning: deprecation } : {}) };
 }
 
 interface ParsedCodexVersion {
