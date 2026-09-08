@@ -1,0 +1,33 @@
+# inspectrum — grok reviewer example
+#
+# Requires the grok CLI on PATH, signed in, with Grok Build balance available.
+# Verify with: inspectrum doctor
+#
+# Canonical invocation:
+#   grok --prompt-file <tmpfile> --json-schema <schema>
+#        --tools read_file,grep,list_dir --max-turns 8
+#        --disable-web-search --no-subagents [-m <model>] [--effort <e>]
+#
+# CONFINEMENT — three mechanisms were tested against the real CLI:
+#   --sandbox read-only          did NOT block a write to /tmp
+#   --disallowed-tools <names>   was ignored (grok still reported
+#                                run_terminal_command as available)
+#   --tools <allow-list>         DID block it, even given 8 turns
+# Only the allow-list confines, so that is what inspectrum pins. --tools,
+# --always-approve and --permission-mode are dropped from `args`.
+
+[defaults]
+reviewers = ["grok"]
+judge     = "codex"
+
+[reviewers.grok]
+type   = "cli"
+binary = "grok"
+# model  = "grok-4.6-build"  # passed as -m
+# effort = "high"            # passed as --effort
+# timeout_seconds = 300
+
+# Multi-reviewer with a judge:
+# [defaults]
+# reviewers = ["grok", "agy", "codex"]
+# judge     = "codex"

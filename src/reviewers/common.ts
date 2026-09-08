@@ -7,6 +7,7 @@ import {
   RawReviewSchema,
   ClaudeEnvelopeSchema,
   AgyEnvelopeSchema,
+  GrokEnvelopeSchema,
   OllamaResponseSchema,
   OpenRouterResponseSchema,
 } from "../schemas.js";
@@ -22,7 +23,8 @@ export type ReviewerBackend =
   | "qwen"
   | "muse"
   | "opencode"
-  | "agy";
+  | "agy"
+  | "grok";
 
 const PLAN_MAX_CHARS = 16000;
 export const TRUNCATION_MARKER = "\n\n[...truncated]";
@@ -152,12 +154,12 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
   if (idBackend) return idBackend;
 
   throw new ReviewerOperationalError(
-    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, opencode, agy, ollama (http), openrouter (http).`,
+    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, opencode, agy, grok, ollama (http), openrouter (http).`,
   );
 }
 
 function backendFromName(name: string): ReviewerBackend | undefined {
-  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse", "opencode", "agy"] as const;
+  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse", "opencode", "agy", "grok"] as const;
   return (known as readonly string[]).includes(name) ? (name as ReviewerBackend) : undefined;
 }
 
@@ -183,6 +185,7 @@ export async function runBackendJsonReview(opts: {
   if (opts.backend === "muse") return runMuseJsonReview(opts);
   if (opts.backend === "opencode") return runOpencodeJsonReview(opts);
   if (opts.backend === "agy") return runAgyJsonReview(opts);
+  if (opts.backend === "grok") return runGrokJsonReview(opts);
   return assertUnhandledBackend(opts.backend);
 }
 
@@ -638,6 +641,116 @@ function parseAgyOutput(raw: string, reviewerId: string, label: string): RawRevi
       ? stripJsonPayload(envelope.data.response ?? "")
       : JSON.stringify(envelope.data.structured_output);
   return parseRawReview(payload, reviewerId, label);
+}
+
+/**
+ * Built-in grok tools the reviewer is allowed to use. This is an ALLOW-LIST and it
+ * is the only mechanism that actually confines grok — all three were tested
+ * against the real CLI:
+ *   --sandbox read-only        did NOT stop a write to /tmp
+ *   --disallowed-tools <names> was ignored (grok still reported
+ *                              run_terminal_command as available)
+ *   --tools <allow-list>       DID stop it: "I don't have a local shell tool in
+ *                              this session", with the write never happening.
+ * Reviewing a plan needs no shell, no writes and no subagents.
+ */
+const GROK_ALLOWED_TOOLS = "read_file,grep,list_dir";
+
+const GROK_MAX_TURNS = "8";
+
+const GROK_RESERVED: ReservedFlags = {
+  bool: ["--disable-web-search", "--no-subagents", "--always-approve", "-p", "--single"],
+  paired: [
+    "--tools",
+    "--disallowed-tools",
+    "--max-turns",
+    "--permission-mode",
+    "--sandbox",
+    "--json-schema",
+    "--output-format",
+    "--prompt-file",
+    "--system-prompt-override",
+  ],
+};
+
+/**
+ * grok reviewer. Verified contract:
+ *   grok --prompt-file <file> --json-schema <schema> --tools <allow-list>
+ *        --max-turns N --disable-web-search --no-subagents [-m <model>] [--effort <e>]
+ *
+ * Output is a THIRD distinct envelope: {text, stopReason, structuredOutput} —
+ * camelCase, unlike Claude's structured_output and agy's response. A valid
+ * structuredOutput is accepted regardless of stopReason (the schema was
+ * satisfied; a trailing thought may simply have hit a token cap); without one,
+ * anything other than end_turn is an operational failure.
+ */
+async function runGrokJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "grok";
+  const model = extractModel(opts.config);
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-grok-"));
+  const promptFile = join(tempDir, "prompt.txt");
+
+  try {
+    writeFileSync(promptFile, `${opts.systemPrompt}\n\n${opts.userMessage}`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    const userArgs = mergeReviewerArgs(opts.config.args, GROK_RESERVED);
+    const args = [
+      "--prompt-file",
+      promptFile,
+      "--tools",
+      GROK_ALLOWED_TOOLS,
+      "--max-turns",
+      GROK_MAX_TURNS,
+      "--disable-web-search",
+      "--no-subagents",
+      ...(model ? ["-m", model] : []),
+      ...(opts.config.effort ? ["--effort", opts.config.effort] : []),
+      ...userArgs,
+      "--json-schema",
+      RAW_REVIEW_JSON_SCHEMA,
+    ];
+    const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseGrokOutput(stdout, opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function parseGrokOutput(raw: string, reviewerId: string, label: string): RawReview {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    throw new ReviewerOperationalError(`${label} reviewer returned non-JSON output: ${raw.slice(0, 200)}`);
+  }
+
+  const envelope = GrokEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) {
+    throw new ReviewerOperationalError(`${label} output did not match expected envelope: ${raw.slice(0, 200)}`);
+  }
+  // A failing run prints {"type":"error","message":"..."} (e.g. HTTP 402).
+  if (envelope.data.type === "error") {
+    throw new ReviewerOperationalError(`${label} reviewer failed: ${envelope.data.message ?? "unknown error"}`);
+  }
+
+  if (envelope.data.structuredOutput != null) {
+    return parseRawReview(JSON.stringify(envelope.data.structuredOutput), reviewerId, label);
+  }
+  if (envelope.data.stopReason !== "end_turn") {
+    throw new ReviewerOperationalError(
+      `${label} reviewer stopped early (stopReason: ${envelope.data.stopReason ?? "unknown"}) without structured output`,
+    );
+  }
+  return parseRawReview(stripJsonPayload(envelope.data.text ?? ""), reviewerId, label);
 }
 
 async function runQwenJsonReview(opts: {

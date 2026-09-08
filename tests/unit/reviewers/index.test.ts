@@ -11,6 +11,7 @@ import {
   MuseReviewer,
   OpencodeReviewer,
   AgyReviewer,
+  GrokReviewer,
 } from "../../../src/reviewers/index.js";
 import { runBackendJsonReview } from "../../../src/reviewers/common.js";
 
@@ -211,5 +212,24 @@ describe("createReviewer — agy", () => {
   it("infers agy from the binary basename", () => {
     const reviewer = createReviewer("reviewer-c", { type: "cli", binary: "/Users/x/.local/bin/agy" });
     expect(reviewer).toBeInstanceOf(AgyReviewer);
+  });
+});
+
+describe("createReviewer — grok", () => {
+  it("returns a GrokReviewer for grok cli config", () => {
+    const reviewer = createReviewer("grok", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(GrokReviewer);
+    expect(reviewer.id).toBe("grok");
+  });
+
+  it("honors an explicit grok backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "grok", binary: "/opt/grok" });
+    expect(reviewer).toBeInstanceOf(GrokReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers grok from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-d", { type: "cli", binary: "/Users/x/.grok/bin/grok" });
+    expect(reviewer).toBeInstanceOf(GrokReviewer);
   });
 });

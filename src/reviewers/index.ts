@@ -9,6 +9,7 @@ import { QwenReviewer } from "./qwen.js";
 import { MuseReviewer } from "./muse.js";
 import { OpencodeReviewer } from "./opencode.js";
 import { AgyReviewer } from "./agy.js";
+import { GrokReviewer } from "./grok.js";
 import { assertUnhandledBackend, resolveReviewerBackend } from "./common.js";
 
 export interface Reviewer {
@@ -29,6 +30,7 @@ export function createReviewer(id: string, config: ReviewerConfig, limits?: Conf
   if (backend === "muse") return new MuseReviewer(id, config, timeoutMs);
   if (backend === "opencode") return new OpencodeReviewer(id, config, timeoutMs);
   if (backend === "agy") return new AgyReviewer(id, config, timeoutMs);
+  if (backend === "grok") return new GrokReviewer(id, config, timeoutMs);
   return assertUnhandledBackend(backend);
 }
 
@@ -43,4 +45,5 @@ export {
   MuseReviewer,
   OpencodeReviewer,
   AgyReviewer,
+  GrokReviewer,
 };

@@ -265,6 +265,7 @@ function installFix(id: string): string {
     muse: "Install the muse CLI and ensure it is in your PATH, then run `muse login`",
     opencode: "Install opencode: https://opencode.ai — then run `opencode providers login`",
     agy: "Install the agy CLI and ensure it is in your PATH",
+    grok: "Install the grok CLI and ensure it is in your PATH, then sign in",
     ollama: "Start Ollama: brew install ollama && ollama serve",
     openrouter: "Set OPENROUTER_API_KEY env var: https://openrouter.ai/keys",
   };

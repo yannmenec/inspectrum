@@ -86,6 +86,20 @@ export const AgyEnvelopeSchema = z.object({
   structured_output: z.unknown().optional(),
 });
 
+/**
+ * Envelope emitted by `grok --json-schema` (which implies --output-format json).
+ * A THIRD distinct shape: Claude uses {type, is_error, result, structured_output},
+ * agy uses {status, response, structured_output}, and grok uses {stopReason, text,
+ * structuredOutput} — camelCase, unlike the other two. Kept separate on purpose.
+ */
+export const GrokEnvelopeSchema = z.object({
+  stopReason: z.string().optional(),
+  text: z.string().optional(),
+  structuredOutput: z.unknown().optional(),
+  type: z.string().optional(),
+  message: z.string().optional(),
+});
+
 export const ClaudePluginListSchema = z.array(z.looseObject({
   id: z.string(),
   version: z.string().optional(),
@@ -94,7 +108,7 @@ export const ClaudePluginListSchema = z.array(z.looseObject({
 
 export const ReviewerConfigSchema = z.object({
   type: z.enum(["cli", "http"]).default("cli"),
-  backend: z.enum(["claude", "codex", "gemini", "ollama", "openrouter", "kimi", "qwen", "muse", "opencode", "agy"]).optional(),
+  backend: z.enum(["claude", "codex", "gemini", "ollama", "openrouter", "kimi", "qwen", "muse", "opencode", "agy", "grok"]).optional(),
   binary: z.string().optional(),
   args: z.array(z.string()).optional(),
   endpoint: z.string().optional(),
