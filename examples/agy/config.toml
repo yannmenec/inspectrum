@@ -1,6 +1,10 @@
 # inspectrum — agy reviewer example
 #
-# Requires the agy CLI on PATH and authenticated. Verify with: inspectrum doctor
+# agy is Google's Antigravity CLI. Install:
+#   curl -fsSL https://antigravity.google/cli/install.sh | bash
+# then run `agy` once and sign in with a Google account (or set
+# GEMINI_API_KEY with "modelProvider": "gemini" in
+# ~/.gemini/antigravity-cli/settings.json). Verify with: inspectrum doctor
 #
 # Canonical invocation:
 #   agy -p <prompt> --disable-slash-commands --json-schema <schema>
@@ -10,10 +14,14 @@
 # source: --json-schema fills the envelope's `structured_output`, which the
 # adapter prefers over the `response` string.
 #
-# NOTE: agy has no filesystem confinement flag. `--sandbox` was verified NOT to
-# block writes under /tmp. It refused an explicit prompt-injection attempt on its
-# own judgement, but that is not a technical guarantee — prefer muse or opencode
-# when reviewing plans from an untrusted source.
+# CONFINEMENT: agy has NO working confinement flag (verified on agy 1.1.27).
+# `--sandbox` did not block a write to /tmp; `--mode plan` did not either — with
+# `--disable-slash-commands` pinned the CLI itself warns that plan mode "has no
+# effect while slash command expansion is disabled", and without that pin the
+# write still happened. It refused an explicit prompt-injection attempt on its
+# own judgement, but that is not a technical guarantee. Do NOT review plans from
+# an untrusted source with agy — muse, opencode and grok are the confined
+# backends, and `inspectrum doctor` warns whenever agy is configured.
 
 [defaults]
 reviewers = ["agy"]

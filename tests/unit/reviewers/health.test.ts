@@ -310,6 +310,15 @@ describe("checkReviewer — HTTP", () => {
     });
   });
 
+  it("provides install hint naming Antigravity when agy is missing", () => {
+    const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
+    return expect(checkReviewer("agy", { type: "cli", binary: "agy" })).resolves.toMatchObject({
+      ok: false,
+      fix: expect.stringContaining("antigravity.google"),
+    });
+  });
+
   it("provides install hint for qwen when binary missing", () => {
     const err = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
     vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
