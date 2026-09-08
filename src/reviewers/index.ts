@@ -8,6 +8,7 @@ import { KimiReviewer } from "./kimi.js";
 import { QwenReviewer } from "./qwen.js";
 import { MuseReviewer } from "./muse.js";
 import { OpencodeReviewer } from "./opencode.js";
+import { AgyReviewer } from "./agy.js";
 import { assertUnhandledBackend, resolveReviewerBackend } from "./common.js";
 
 export interface Reviewer {
@@ -27,6 +28,7 @@ export function createReviewer(id: string, config: ReviewerConfig, limits?: Conf
   if (backend === "gemini") return new GeminiReviewer(id, config, timeoutMs);
   if (backend === "muse") return new MuseReviewer(id, config, timeoutMs);
   if (backend === "opencode") return new OpencodeReviewer(id, config, timeoutMs);
+  if (backend === "agy") return new AgyReviewer(id, config, timeoutMs);
   return assertUnhandledBackend(backend);
 }
 
@@ -40,4 +42,5 @@ export {
   QwenReviewer,
   MuseReviewer,
   OpencodeReviewer,
+  AgyReviewer,
 };

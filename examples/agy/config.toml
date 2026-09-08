@@ -1,0 +1,33 @@
+# inspectrum — agy reviewer example
+#
+# Requires the agy CLI on PATH and authenticated. Verify with: inspectrum doctor
+#
+# Canonical invocation:
+#   agy -p <prompt> --disable-slash-commands --json-schema <schema>
+#       --output-format json [--model <m>] [--effort <e>]
+#
+# agy is the only CLI backend here whose output is schema-constrained at the
+# source: --json-schema fills the envelope's `structured_output`, which the
+# adapter prefers over the `response` string.
+#
+# NOTE: agy has no filesystem confinement flag. `--sandbox` was verified NOT to
+# block writes under /tmp. It refused an explicit prompt-injection attempt on its
+# own judgement, but that is not a technical guarantee — prefer muse or opencode
+# when reviewing plans from an untrusted source.
+
+[defaults]
+reviewers = ["agy"]
+judge     = "codex"
+
+[reviewers.agy]
+type   = "cli"
+binary = "agy"
+# model  = "..."   # passed as --model
+# effort = "high"  # passed as --effort — ONLY set this if your model supports it:
+                   # `agy --effort high` with the default model fails outright.
+# timeout_seconds = 300
+
+# Multi-reviewer with a judge:
+# [defaults]
+# reviewers = ["agy", "muse", "codex"]
+# judge     = "codex"

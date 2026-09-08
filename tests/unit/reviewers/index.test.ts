@@ -10,6 +10,7 @@ import {
   QwenReviewer,
   MuseReviewer,
   OpencodeReviewer,
+  AgyReviewer,
 } from "../../../src/reviewers/index.js";
 import { runBackendJsonReview } from "../../../src/reviewers/common.js";
 
@@ -191,5 +192,24 @@ describe("createReviewer — opencode", () => {
   it("infers opencode from the binary basename", () => {
     const reviewer = createReviewer("reviewer-b", { type: "cli", binary: "/Users/x/.opencode/bin/opencode" });
     expect(reviewer).toBeInstanceOf(OpencodeReviewer);
+  });
+});
+
+describe("createReviewer — agy", () => {
+  it("returns an AgyReviewer for agy cli config", () => {
+    const reviewer = createReviewer("agy", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(AgyReviewer);
+    expect(reviewer.id).toBe("agy");
+  });
+
+  it("honors an explicit agy backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "agy", binary: "/opt/agy" });
+    expect(reviewer).toBeInstanceOf(AgyReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers agy from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-c", { type: "cli", binary: "/Users/x/.local/bin/agy" });
+    expect(reviewer).toBeInstanceOf(AgyReviewer);
   });
 });

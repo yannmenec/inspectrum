@@ -3,7 +3,13 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { RawReviewSchema, ClaudeEnvelopeSchema, OllamaResponseSchema, OpenRouterResponseSchema } from "../schemas.js";
+import {
+  RawReviewSchema,
+  ClaudeEnvelopeSchema,
+  AgyEnvelopeSchema,
+  OllamaResponseSchema,
+  OpenRouterResponseSchema,
+} from "../schemas.js";
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 
 export type ReviewerBackend =
@@ -15,7 +21,8 @@ export type ReviewerBackend =
   | "kimi"
   | "qwen"
   | "muse"
-  | "opencode";
+  | "opencode"
+  | "agy";
 
 const PLAN_MAX_CHARS = 16000;
 export const TRUNCATION_MARKER = "\n\n[...truncated]";
@@ -145,12 +152,12 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
   if (idBackend) return idBackend;
 
   throw new ReviewerOperationalError(
-    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, opencode, ollama (http), openrouter (http).`,
+    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, opencode, agy, ollama (http), openrouter (http).`,
   );
 }
 
 function backendFromName(name: string): ReviewerBackend | undefined {
-  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse", "opencode"] as const;
+  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse", "opencode", "agy"] as const;
   return (known as readonly string[]).includes(name) ? (name as ReviewerBackend) : undefined;
 }
 
@@ -175,6 +182,7 @@ export async function runBackendJsonReview(opts: {
   if (opts.backend === "gemini") return runGeminiJsonReview(opts);
   if (opts.backend === "muse") return runMuseJsonReview(opts);
   if (opts.backend === "opencode") return runOpencodeJsonReview(opts);
+  if (opts.backend === "agy") return runAgyJsonReview(opts);
   return assertUnhandledBackend(opts.backend);
 }
 
@@ -560,6 +568,76 @@ async function runOpencodeJsonReview(opts: {
   const stdin = `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`;
   const { stdout } = await spawnCollect({ binary, args, stdin, timeoutMs: opts.timeoutMs, label: opts.label });
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+}
+
+const AGY_RESERVED: ReservedFlags = {
+  bool: ["-p", "--print", "--prompt", "--disable-slash-commands", "--dangerously-skip-permissions"],
+  paired: ["--output-format", "--json-schema", "--model", "--effort", "--input-format", "--mode"],
+};
+
+/**
+ * agy reviewer. Verified contract:
+ *   agy -p <prompt> --disable-slash-commands --json-schema <schema>
+ *       --output-format json [--model <m>] [--effort <e>]
+ *
+ * `--effort` is passed ONLY when configured: a real run of `agy --effort high`
+ * with no model failed with "--effort is not supported for the current model".
+ *
+ * Output is a proprietary envelope — {conversation_id, status, response,
+ * structured_output, ...} — sharing no field names with Claude's, hence its own
+ * AgyEnvelopeSchema. `structured_output` is preferred because --json-schema fills
+ * it deterministically; `response` is a STRINGIFIED JSON fallback that has been
+ * observed carrying a markdown fence, so it goes through stripJsonPayload.
+ */
+async function runAgyJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "agy";
+  const model = extractModel(opts.config);
+  const userArgs = mergeReviewerArgs(opts.config.args, AGY_RESERVED);
+  const args = [
+    "-p",
+    `${opts.systemPrompt}\n\n${opts.userMessage}`,
+    "--disable-slash-commands",
+    ...(model ? ["--model", model] : []),
+    ...(opts.config.effort ? ["--effort", opts.config.effort] : []),
+    ...userArgs,
+    "--json-schema",
+    RAW_REVIEW_JSON_SCHEMA,
+    "--output-format",
+    "json",
+  ];
+  const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label });
+  return parseAgyOutput(stdout, opts.reviewerId, opts.label);
+}
+
+function parseAgyOutput(raw: string, reviewerId: string, label: string): RawReview {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    throw new ReviewerOperationalError(`${label} reviewer returned non-JSON output: ${raw.slice(0, 200)}`);
+  }
+
+  const envelope = AgyEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) {
+    throw new ReviewerOperationalError(`${label} output did not match expected envelope: ${raw.slice(0, 200)}`);
+  }
+  if (envelope.data.status !== "SUCCESS") {
+    const detail = envelope.data.error ?? envelope.data.response ?? envelope.data.status;
+    throw new ReviewerOperationalError(`${label} reviewer failed: ${detail}`);
+  }
+
+  const payload =
+    envelope.data.structured_output == null
+      ? stripJsonPayload(envelope.data.response ?? "")
+      : JSON.stringify(envelope.data.structured_output);
+  return parseRawReview(payload, reviewerId, label);
 }
 
 async function runQwenJsonReview(opts: {

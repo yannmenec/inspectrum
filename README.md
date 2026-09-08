@@ -262,6 +262,12 @@ binary = "opencode"               # opencode run, prompt on stdin
 # model  = "google/gemini-2.5-flash"   # -m, provider/model form
 # effort = "high"                 # passed as --variant
 
+[reviewers.agy]
+type   = "cli"
+binary = "agy"                    # schema-constrained structured output
+# model  = "..."                  # passed as --model
+# effort = "high"                 # --effort; only some models accept it
+
 [reviewers.local]
 type     = "http"
 backend  = "ollama"
@@ -273,7 +279,7 @@ report_max_chars = 8000           # caps the stored report
 timeout_seconds  = 300            # default reviewer wallclock
 ```
 
-Without a config file, `reviewers = ["codex"]` is used. Free-tier-friendly: the Gemini CLI works with a personal Google account, no API key. Experimental backends: kimi, qwen, openrouter, ollama (local, zero egress). The **muse** backend runs `muse exec` confined with `--disable-shell --disable-write` (a plan under review is untrusted input); `--yolo`, `--disable-sandbox` and `--enable-shell-tool` are rejected from `args`. The **opencode** backend runs `opencode run --agent summary`, a permission set that denies tool use (the default `build` agent will happily run shell commands from plan text); `--agent`, `--auto` and `--format` are rejected from `args`. The **gemini** backend is deprecated and will be removed — migrate to agy.
+Without a config file, `reviewers = ["codex"]` is used. Free-tier-friendly: the Gemini CLI works with a personal Google account, no API key. Experimental backends: kimi, qwen, openrouter, ollama (local, zero egress). The **muse** backend runs `muse exec` confined with `--disable-shell --disable-write` (a plan under review is untrusted input); `--yolo`, `--disable-sandbox` and `--enable-shell-tool` are rejected from `args`. The **opencode** backend runs `opencode run --agent summary`, a permission set that denies tool use (the default `build` agent will happily run shell commands from plan text); `--agent`, `--auto` and `--format` are rejected from `args`. The **agy** backend constrains output with `--json-schema`, so its reviews are schema-checked at the source; `--effort` is sent only when you set it (some models reject it). The **gemini** backend is deprecated and will be removed — migrate to agy.
 
 Headless or CI host that can't run an interactive login? Pass the peer API key through the MCP host's `env` block instead — `OPENAI_API_KEY` (codex), `ANTHROPIC_API_KEY` (claude), `GEMINI_API_KEY` (gemini). Manual JSON/TOML examples live under [`examples/`](examples/).
 
@@ -296,7 +302,7 @@ npx -y inspectrum@latest doctor
 
 - Session logs live at `~/.inspectrum/sessions/<timestamp>__<id>/` and contain your full plan plus a Markdown record of each reviewer's verdict and findings. Directory perms are **0700 on POSIX**. Logs written by pre-0.1.0 versions keep their original perms — retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
 - **Never paste secrets into a plan or context.** The plan is written to the local session log, and both the plan and context are sent to every active reviewer.
-- Cloud routes: **claude** → Anthropic (OAuth keychain or `ANTHROPIC_API_KEY`); **codex** → OpenAI (ChatGPT login or `OPENAI_API_KEY`); **gemini** → Google (personal-account CLI login or `GEMINI_API_KEY`); **openrouter** → openrouter.ai; **kimi** → Moonshot AI; **qwen** → Alibaba Cloud; **muse** → the CLI's own stored credentials (`muse login`); **opencode** → whichever provider you configure (`opencode providers login`); **ollama** → localhost only, zero egress unless you change `endpoint`.
+- Cloud routes: **claude** → Anthropic (OAuth keychain or `ANTHROPIC_API_KEY`); **codex** → OpenAI (ChatGPT login or `OPENAI_API_KEY`); **gemini** → Google (personal-account CLI login or `GEMINI_API_KEY`); **openrouter** → openrouter.ai; **kimi** → Moonshot AI; **qwen** → Alibaba Cloud; **muse** → the CLI's own stored credentials (`muse login`); **opencode** → whichever provider you configure (`opencode providers login`); **agy** → the CLI's own stored credentials; **ollama** → localhost only, zero egress unless you change `endpoint`.
 - Codex is invoked as `codex exec --ephemeral --skip-git-repo-check -s read-only …` in a throwaway temp directory — the sandbox is pinned read-only, sandbox-weakening and cwd-override args from your config are stripped, and codex persists no session files.
 
 </details>
