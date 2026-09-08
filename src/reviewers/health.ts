@@ -262,6 +262,7 @@ function installFix(id: string): string {
     gemini: "Install Gemini CLI: npm install -g @google/gemini-cli",
     kimi: "Install Kimi CLI: uv tool install --python 3.13 kimi-cli",
     qwen: "Install Qwen Code CLI: npm install -g @qwen-code/qwen-code@latest",
+    muse: "Install the muse CLI and ensure it is in your PATH, then run `muse login`",
     ollama: "Start Ollama: brew install ollama && ollama serve",
     openrouter: "Set OPENROUTER_API_KEY env var: https://openrouter.ai/keys",
   };

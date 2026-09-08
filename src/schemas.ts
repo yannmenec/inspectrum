@@ -81,7 +81,7 @@ export const ClaudePluginListSchema = z.array(z.looseObject({
 
 export const ReviewerConfigSchema = z.object({
   type: z.enum(["cli", "http"]).default("cli"),
-  backend: z.enum(["claude", "codex", "gemini", "ollama", "openrouter", "kimi", "qwen"]).optional(),
+  backend: z.enum(["claude", "codex", "gemini", "ollama", "openrouter", "kimi", "qwen", "muse"]).optional(),
   binary: z.string().optional(),
   args: z.array(z.string()).optional(),
   endpoint: z.string().optional(),

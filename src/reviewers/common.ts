@@ -6,7 +6,15 @@ import { basename, join } from "node:path";
 import { RawReviewSchema, ClaudeEnvelopeSchema, OllamaResponseSchema, OpenRouterResponseSchema } from "../schemas.js";
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 
-export type ReviewerBackend = "claude" | "codex" | "gemini" | "ollama" | "openrouter" | "kimi" | "qwen";
+export type ReviewerBackend =
+  | "claude"
+  | "codex"
+  | "gemini"
+  | "ollama"
+  | "openrouter"
+  | "kimi"
+  | "qwen"
+  | "muse";
 
 const PLAN_MAX_CHARS = 16000;
 export const TRUNCATION_MARKER = "\n\n[...truncated]";
@@ -136,12 +144,12 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
   if (idBackend) return idBackend;
 
   throw new ReviewerOperationalError(
-    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, ollama (http), openrouter (http).`,
+    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, ollama (http), openrouter (http).`,
   );
 }
 
 function backendFromName(name: string): ReviewerBackend | undefined {
-  const known = ["claude", "codex", "gemini", "kimi", "qwen"] as const;
+  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse"] as const;
   return (known as readonly string[]).includes(name) ? (name as ReviewerBackend) : undefined;
 }
 
@@ -164,6 +172,7 @@ export async function runBackendJsonReview(opts: {
   if (opts.backend === "kimi") return runKimiJsonReview(opts);
   if (opts.backend === "qwen") return runQwenJsonReview(opts);
   if (opts.backend === "gemini") return runGeminiJsonReview(opts);
+  if (opts.backend === "muse") return runMuseJsonReview(opts);
   return assertUnhandledBackend(opts.backend);
 }
 
@@ -437,6 +446,72 @@ async function runKimiJsonReview(opts: {
   const args = ["-m", model, ...userArgs, "-p", opts.systemPrompt + JSON_INSTRUCTION];
   const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+}
+
+const MUSE_RESERVED: ReservedFlags = {
+  // `exec` is the subcommand we always inject. The confinement flags are pinned
+  // by the canonical invocation: a plan under review is untrusted input, and a
+  // real run of `muse exec --disable-approval` alone DID execute a shell command
+  // and write outside the repo. --yolo / --disable-sandbox / --enable-shell-tool
+  // would undo that, and --json switches stdout to a JSONL event stream.
+  bool: [
+    "exec",
+    "--disable-approval",
+    "--disable-shell",
+    "--disable-write",
+    "--yolo",
+    "--disable-sandbox",
+    "--enable-shell-tool",
+    "--json",
+    "--trust-workspace",
+  ],
+  paired: ["--model", "--reasoning-effort", "--prompt-file", "--provider", "--preset"],
+};
+
+/**
+ * muse takes its prompt positionally or via --prompt-file, and does NOT read the
+ * user message from stdin. We use --prompt-file (0600, in a temp dir) so the plan
+ * never lands in argv where `ps aux` would expose it, and so long plans cannot hit
+ * ARG_MAX. stdin is deliberately left unwritten: `muse exec` also supports
+ * --api-key-stdin on that stream.
+ *
+ * Verified against muse 0.x: exit 0, bare JSON on stdout, diagnostics on stderr.
+ */
+async function runMuseJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "muse";
+  const model = extractModel(opts.config);
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-muse-"));
+  const promptFile = join(tempDir, "prompt.txt");
+
+  try {
+    writeFileSync(promptFile, `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    const userArgs = mergeReviewerArgs(opts.config.args, MUSE_RESERVED);
+    const args = [
+      "exec",
+      "--disable-approval",
+      "--disable-shell",
+      "--disable-write",
+      ...(model ? ["--model", model] : []),
+      ...(opts.config.effort ? ["--reasoning-effort", opts.config.effort] : []),
+      ...userArgs,
+      "--prompt-file",
+      promptFile,
+    ];
+    const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 async function runQwenJsonReview(opts: {

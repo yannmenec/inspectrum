@@ -1,0 +1,29 @@
+# inspectrum — muse reviewer example
+#
+# Requires the muse CLI on PATH and an authenticated provider (`muse login`).
+# Verify with: inspectrum doctor
+#
+# The canonical invocation is:
+#   muse exec --disable-approval --disable-shell --disable-write \
+#             [--model <m>] [--reasoning-effort <e>] --prompt-file <tmpfile>
+#
+# --disable-shell / --disable-write are pinned on purpose: the plan being
+# reviewed is untrusted input, and muse's agent can otherwise run shell
+# commands and write files. Flags that would undo the confinement
+# (--yolo, --disable-sandbox, --enable-shell-tool) are dropped from `args`.
+
+[defaults]
+reviewers = ["muse"]
+judge     = "codex"
+
+[reviewers.muse]
+type   = "cli"
+binary = "muse"
+# model  = "..."     # omit to inherit muse's own default model
+# effort = "high"    # passed as --reasoning-effort (none|minimal|low|medium|high|xhigh|max)
+# timeout_seconds = 300
+
+# Multi-reviewer with a judge:
+# [defaults]
+# reviewers = ["muse", "codex"]
+# judge     = "codex"

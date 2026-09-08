@@ -8,6 +8,7 @@ import {
   OpenRouterReviewer,
   KimiReviewer,
   QwenReviewer,
+  MuseReviewer,
 } from "../../../src/reviewers/index.js";
 import { runBackendJsonReview } from "../../../src/reviewers/common.js";
 
@@ -151,5 +152,24 @@ describe("runBackendJsonReview defensive guard", () => {
         label: "OpenRouter",
       }),
     ).rejects.toThrow(/must use runHttpJsonReview/i);
+  });
+});
+
+describe("createReviewer — muse", () => {
+  it("returns a MuseReviewer for muse cli config", () => {
+    const reviewer = createReviewer("muse", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(MuseReviewer);
+    expect(reviewer.id).toBe("muse");
+  });
+
+  it("honors an explicit muse backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "muse", binary: "/opt/muse" });
+    expect(reviewer).toBeInstanceOf(MuseReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers muse from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-a", { type: "cli", binary: "/Users/x/.local/bin/muse" });
+    expect(reviewer).toBeInstanceOf(MuseReviewer);
   });
 });
