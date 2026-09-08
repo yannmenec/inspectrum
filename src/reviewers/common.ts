@@ -163,7 +163,21 @@ export async function runBackendJsonReview(opts: {
   if (opts.backend === "codex") return runCodexJsonReview(opts);
   if (opts.backend === "kimi") return runKimiJsonReview(opts);
   if (opts.backend === "qwen") return runQwenJsonReview(opts);
-  return runGeminiJsonReview(opts);
+  if (opts.backend === "gemini") return runGeminiJsonReview(opts);
+  return assertUnhandledBackend(opts.backend);
+}
+
+/**
+ * Exhaustiveness guard for backend dispatch. The `never` parameter makes a
+ * forgotten branch a COMPILE error; the throw covers the runtime case where a
+ * value reaches us from outside the type system (a hand-edited config.toml, or
+ * a stale build). Both dispatch sites previously ended in a bare Gemini return,
+ * which silently ran Gemini for any unhandled backend instead of failing.
+ */
+export function assertUnhandledBackend(backend: never): never {
+  throw new ReviewerOperationalError(
+    `Unhandled reviewer backend: ${String(backend)}. This is a bug in inspectrum's backend dispatch.`,
+  );
 }
 
 export async function runHttpJsonReview(opts: {
@@ -460,10 +474,19 @@ function extractModel(config: ReviewerConfig, defaultModel?: string): string | u
   return defaultModel;
 }
 
-function spawnCollect(opts: {
+/**
+ * Spawns a reviewer CLI and collects stdout/stderr.
+ *
+ * `stdin` is OPTIONAL: backends that hand the prompt over by file (muse and grok
+ * `--prompt-file`) must not have an unrelated payload written to their stdin —
+ * `muse exec` also reads `--api-key-stdin` from that stream. When `stdin` is
+ * omitted the stream is closed immediately without a write, so the child never
+ * blocks waiting on input. An empty string is a payload and IS written.
+ */
+export function spawnCollect(opts: {
   binary: string;
   args: string[];
-  stdin: string;
+  stdin?: string;
   timeoutMs: number;
   label: string;
   cwd?: string;
@@ -516,7 +539,7 @@ function spawnCollect(opts: {
       });
     });
 
-    proc.stdin.write(opts.stdin);
+    if (opts.stdin !== undefined) proc.stdin.write(opts.stdin);
     proc.stdin.end();
   });
 }

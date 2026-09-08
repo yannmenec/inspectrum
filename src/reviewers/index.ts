@@ -6,7 +6,7 @@ import { OllamaReviewer } from "./ollama.js";
 import { OpenRouterReviewer } from "./openrouter.js";
 import { KimiReviewer } from "./kimi.js";
 import { QwenReviewer } from "./qwen.js";
-import { resolveReviewerBackend } from "./common.js";
+import { assertUnhandledBackend, resolveReviewerBackend } from "./common.js";
 
 export interface Reviewer {
   id: string;
@@ -22,7 +22,8 @@ export function createReviewer(id: string, config: ReviewerConfig, limits?: Conf
   if (backend === "openrouter") return new OpenRouterReviewer(id, config, timeoutMs);
   if (backend === "kimi") return new KimiReviewer(id, config, timeoutMs);
   if (backend === "qwen") return new QwenReviewer(id, config, timeoutMs);
-  return new GeminiReviewer(id, config, timeoutMs);
+  if (backend === "gemini") return new GeminiReviewer(id, config, timeoutMs);
+  return assertUnhandledBackend(backend);
 }
 
 export { ClaudeReviewer, CodexReviewer, GeminiReviewer, OllamaReviewer, OpenRouterReviewer, KimiReviewer, QwenReviewer };
