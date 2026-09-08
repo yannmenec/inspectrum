@@ -221,3 +221,54 @@ describe("KimiReviewer", () => {
     expect(args.filter((a) => a === "-p")).toHaveLength(1);
   });
 });
+
+describe("KimiReviewer — multi-assistant JSONL streams", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  const multiLine = (lines: string[]): string => lines.join("\n");
+  const metaVersion = JSON.stringify({ role: "meta", type: "system.version", version: "0.41.0" });
+  const resumeHint = JSON.stringify({ role: "meta", type: "session.resume_hint", session_id: "s1" });
+
+  // kimi may emit more than one assistant event before the final answer (a
+  // streamed partial, a tool narration). The FIRST one is often prose that is
+  // not the review; only the last carries it. Regression: the parser used to
+  // return on the first assistant line and lost the review.
+  it("takes the LAST assistant line when earlier ones are streamed narration", async () => {
+    const narration = "I'll work through this plan step by step before judging it.";
+    const stdout = multiLine([
+      metaVersion,
+      JSON.stringify({ role: "assistant", content: narration }),
+      JSON.stringify({ role: "assistant", content: JSON.stringify(validRawReview) }),
+      resumeHint,
+    ]);
+    mockSpawn.mockReturnValue(makeMockProcess(stdout));
+    const result = await new KimiReviewer("kimi", cfg).review("# Plan", "all");
+    expect(result.verdict).toBe("revise");
+    expect(result.findings).toHaveLength(1);
+  });
+
+  it("lets the last assistant line win over an earlier assistant JSON review", async () => {
+    const stale = { ...validRawReview, verdict: "reject", summary: "Stale take." };
+    const fresh = { ...validRawReview, verdict: "approve", summary: "Final take." };
+    const stdout = multiLine([
+      metaVersion,
+      JSON.stringify({ role: "assistant", content: JSON.stringify(stale) }),
+      JSON.stringify({ role: "assistant", content: JSON.stringify(fresh) }),
+      resumeHint,
+    ]);
+    mockSpawn.mockReturnValue(makeMockProcess(stdout));
+    const result = await new KimiReviewer("kimi", cfg).review("# Plan", "all");
+    expect(result.verdict).toBe("approve");
+    expect(result.summary).toBe("Final take.");
+  });
+
+  it("still throws when no assistant line ever carries content", async () => {
+    const stdout = multiLine([
+      metaVersion,
+      JSON.stringify({ role: "meta", type: "event", event: "turn_complete" }),
+      resumeHint,
+    ]);
+    mockSpawn.mockReturnValue(makeMockProcess(stdout));
+    await expect(new KimiReviewer("kimi", cfg).review("# Plan", "all")).rejects.toThrow(/no assistant message/i);
+  });
+});
