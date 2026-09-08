@@ -440,6 +440,24 @@ async function runGeminiJsonReview(opts: {
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
 }
 
+const KIMI_RESERVED: ReservedFlags = {
+  bool: ["-p", "--prompt", "-y", "--yolo", "--auto", "-c", "--continue", "--plan"],
+  paired: ["-m", "--model", "--output-format", "-S", "--session"],
+};
+
+/**
+ * kimi (`kimi-code`) reviewer. Contract verified against kimi 0.41.0 — the flags
+ * were previously guessed, and the guess was wrong on both points that matter:
+ *
+ *  - kimi does NOT read stdin. Passing the plan there meant the model never saw
+ *    it: asked to echo a secret word supplied only on stdin, kimi answered
+ *    "NOSTDIN". The whole prompt therefore goes in the -p argument.
+ *  - default text output is prefixed with "• ", which stripJsonPayload cannot
+ *    recover. --output-format stream-json emits clean JSONL instead, with the
+ *    review carried on the single `role: "assistant"` line.
+ *
+ * Auth: the CLI's own device-code login (`kimi login`), not an env var.
+ */
 async function runKimiJsonReview(opts: {
   reviewerId: string;
   config: ReviewerConfig;
@@ -448,17 +466,43 @@ async function runKimiJsonReview(opts: {
   timeoutMs: number;
   label: string;
 }): Promise<RawReview> {
-  // ASSUMPTION: kimi CLI (uv tool install --python 3.13 kimi-cli) uses:
-  //   kimi -m <model> -p <systemPrompt>
-  //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
-  // Auth: MOONSHOT_API_KEY env var (CLI reads automatically)
-  // If actual CLI flags differ, update the args array below.
   const binary = opts.config.binary ?? "kimi";
-  const model = extractModel(opts.config, "kimi-k2");
-  const userArgs = mergeReviewerArgs(opts.config.args, GEMINI_FAMILY_RESERVED);
-  const args = ["-m", model, ...userArgs, "-p", opts.systemPrompt + JSON_INSTRUCTION];
-  const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
-  return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+  const model = extractModel(opts.config);
+  const userArgs = mergeReviewerArgs(opts.config.args, KIMI_RESERVED);
+  const args = [
+    "--output-format",
+    "stream-json",
+    ...(model ? ["-m", model] : []),
+    ...userArgs,
+    "-p",
+    `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`,
+  ];
+  const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label });
+  return parseKimiStreamJson(stdout, opts.reviewerId, opts.label);
+}
+
+/**
+ * Extracts the review from kimi's JSONL stream. Verified shape: a
+ * `{role:"meta",type:"system.version"}` line, one `{role:"assistant",content}`
+ * line carrying the review, and a closing `session.resume_hint` meta line.
+ */
+function parseKimiStreamJson(raw: string, reviewerId: string, label: string): RawReview {
+  const lines = raw.trim().split("\n").filter((l) => l.trim() !== "");
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue; // non-JSON noise between events
+    }
+    const event = parsed as { role?: unknown; content?: unknown };
+    if (event.role === "assistant" && typeof event.content === "string") {
+      return parseRawReview(stripJsonPayload(event.content), reviewerId, label);
+    }
+  }
+  throw new ReviewerOperationalError(
+    `${label} reviewer produced no assistant message: ${raw.slice(0, 200)}`,
+  );
 }
 
 const MUSE_RESERVED: ReservedFlags = {

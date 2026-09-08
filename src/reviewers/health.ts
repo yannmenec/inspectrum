@@ -260,7 +260,7 @@ function installFix(id: string): string {
     claude: "Install Claude Code: https://claude.ai/download",
     codex: "npm install -g @openai/codex@latest",
     gemini: "Install Gemini CLI: npm install -g @google/gemini-cli",
-    kimi: "Install Kimi CLI: uv tool install --python 3.13 kimi-cli",
+    kimi: "Install Kimi Code CLI, then run `kimi login` (device-code flow)",
     qwen: "Install Qwen Code CLI: npm install -g @qwen-code/qwen-code@latest",
     muse: "Install the muse CLI and ensure it is in your PATH, then run `muse login`",
     opencode: "Install opencode: https://opencode.ai — then run `opencode providers login`",

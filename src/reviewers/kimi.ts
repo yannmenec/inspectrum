@@ -3,11 +3,12 @@ import { buildUserMessage, runBackendJsonReview, truncatePlan } from "./common.j
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 import type { Reviewer } from "./index.js";
 
-// ASSUMPTION: kimi CLI (uv tool install --python 3.13 kimi-cli) uses:
-//   kimi -m <model> -p <systemPrompt>
-//   stdin = userMessage, stdout = JSON or markdown-fenced JSON
-// Auth: MOONSHOT_API_KEY env var (CLI reads automatically)
-// If actual CLI flags differ, update runKimiJsonReview in common.ts.
+/**
+ * kimi reviewer. Contract verified against kimi 0.41.0:
+ *   kimi --output-format stream-json [-m <model>] -p <systemPrompt + plan>
+ *   stdin unused (kimi ignores it), stdout = JSONL, review on the assistant line.
+ * Auth: the CLI's own device-code login (`kimi login`).
+ */
 export class KimiReviewer implements Reviewer {
   constructor(
     public readonly id: string,

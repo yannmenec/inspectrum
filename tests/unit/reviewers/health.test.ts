@@ -306,7 +306,7 @@ describe("checkReviewer — HTTP", () => {
     vi.mocked(childProcess.execFileSync).mockImplementation(() => { throw err; });
     return expect(checkReviewer("kimi", { type: "cli", binary: "kimi" })).resolves.toMatchObject({
       ok: false,
-      fix: expect.stringContaining("uv tool install"),
+      fix: expect.stringContaining("kimi login"),
     });
   });
 
