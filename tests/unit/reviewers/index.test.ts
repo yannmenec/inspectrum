@@ -8,6 +8,10 @@ import {
   OpenRouterReviewer,
   KimiReviewer,
   QwenReviewer,
+  MuseReviewer,
+  OpencodeReviewer,
+  AgyReviewer,
+  GrokReviewer,
 } from "../../../src/reviewers/index.js";
 import { runBackendJsonReview } from "../../../src/reviewers/common.js";
 
@@ -151,5 +155,81 @@ describe("runBackendJsonReview defensive guard", () => {
         label: "OpenRouter",
       }),
     ).rejects.toThrow(/must use runHttpJsonReview/i);
+  });
+});
+
+describe("createReviewer — muse", () => {
+  it("returns a MuseReviewer for muse cli config", () => {
+    const reviewer = createReviewer("muse", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(MuseReviewer);
+    expect(reviewer.id).toBe("muse");
+  });
+
+  it("honors an explicit muse backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "muse", binary: "/opt/muse" });
+    expect(reviewer).toBeInstanceOf(MuseReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers muse from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-a", { type: "cli", binary: "/Users/x/.local/bin/muse" });
+    expect(reviewer).toBeInstanceOf(MuseReviewer);
+  });
+});
+
+describe("createReviewer — opencode", () => {
+  it("returns an OpencodeReviewer for opencode cli config", () => {
+    const reviewer = createReviewer("opencode", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(OpencodeReviewer);
+    expect(reviewer.id).toBe("opencode");
+  });
+
+  it("honors an explicit opencode backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "opencode", binary: "/opt/oc" });
+    expect(reviewer).toBeInstanceOf(OpencodeReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers opencode from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-b", { type: "cli", binary: "/Users/x/.opencode/bin/opencode" });
+    expect(reviewer).toBeInstanceOf(OpencodeReviewer);
+  });
+});
+
+describe("createReviewer — agy", () => {
+  it("returns an AgyReviewer for agy cli config", () => {
+    const reviewer = createReviewer("agy", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(AgyReviewer);
+    expect(reviewer.id).toBe("agy");
+  });
+
+  it("honors an explicit agy backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "agy", binary: "/opt/agy" });
+    expect(reviewer).toBeInstanceOf(AgyReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers agy from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-c", { type: "cli", binary: "/Users/x/.local/bin/agy" });
+    expect(reviewer).toBeInstanceOf(AgyReviewer);
+  });
+});
+
+describe("createReviewer — grok", () => {
+  it("returns a GrokReviewer for grok cli config", () => {
+    const reviewer = createReviewer("grok", { type: "cli" });
+    expect(reviewer).toBeInstanceOf(GrokReviewer);
+    expect(reviewer.id).toBe("grok");
+  });
+
+  it("honors an explicit grok backend behind an alias id", () => {
+    const reviewer = createReviewer("second-opinion", { type: "cli", backend: "grok", binary: "/opt/grok" });
+    expect(reviewer).toBeInstanceOf(GrokReviewer);
+    expect(reviewer.id).toBe("second-opinion");
+  });
+
+  it("infers grok from the binary basename", () => {
+    const reviewer = createReviewer("reviewer-d", { type: "cli", binary: "/Users/x/.grok/bin/grok" });
+    expect(reviewer).toBeInstanceOf(GrokReviewer);
   });
 });

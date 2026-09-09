@@ -1,0 +1,41 @@
+# inspectrum — agy reviewer example
+#
+# agy is Google's Antigravity CLI. Install:
+#   curl -fsSL https://antigravity.google/cli/install.sh | bash
+# then run `agy` once and sign in with a Google account (or set
+# GEMINI_API_KEY with "modelProvider": "gemini" in
+# ~/.gemini/antigravity-cli/settings.json). Verify with: inspectrum doctor
+#
+# Canonical invocation:
+#   agy -p <prompt> --disable-slash-commands --json-schema <schema>
+#       --output-format json [--model <m>] [--effort <e>]
+#
+# agy is the only CLI backend here whose output is schema-constrained at the
+# source: --json-schema fills the envelope's `structured_output`, which the
+# adapter prefers over the `response` string.
+#
+# CONFINEMENT: agy has NO working confinement flag (verified on agy 1.1.27).
+# `--sandbox` did not block a write to /tmp; `--mode plan` did not either — with
+# `--disable-slash-commands` pinned the CLI itself warns that plan mode "has no
+# effect while slash command expansion is disabled", and without that pin the
+# write still happened. It refused an explicit prompt-injection attempt on its
+# own judgement, but that is not a technical guarantee. Do NOT review plans from
+# an untrusted source with agy — muse, opencode and grok are the confined
+# backends, and `inspectrum doctor` warns whenever agy is configured.
+
+[defaults]
+reviewers = ["agy"]
+judge     = "codex"
+
+[reviewers.agy]
+type   = "cli"
+binary = "agy"
+# model  = "..."   # passed as --model
+# effort = "high"  # passed as --effort — ONLY set this if your model supports it:
+                   # `agy --effort high` with the default model fails outright.
+# timeout_seconds = 300
+
+# Multi-reviewer with a judge:
+# [defaults]
+# reviewers = ["agy", "muse", "codex"]
+# judge     = "codex"

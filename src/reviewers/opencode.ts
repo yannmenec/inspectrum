@@ -4,12 +4,12 @@ import type { RawReview, ReviewerConfig } from "../schemas.js";
 import type { Reviewer } from "./index.js";
 
 /**
- * kimi reviewer. Contract verified against kimi 0.41.0:
- *   kimi --output-format stream-json [-m <model>] -p <systemPrompt + plan>
- *   stdin unused (kimi ignores it), stdout = JSONL, review on the assistant line.
- * Auth: the CLI's own device-code login (`kimi login`).
+ * opencode (`opencode run`) reviewer. Contract verified against the real CLI:
+ *   opencode run --agent summary [-m <provider/model>] [--variant <effort>]
+ *   prompt on stdin, bare JSON on stdout, banner on stderr.
+ * Auth: the CLI's own stored provider credentials (`opencode providers login`).
  */
-export class KimiReviewer implements Reviewer {
+export class OpencodeReviewer implements Reviewer {
   constructor(
     public readonly id: string,
     private readonly config: ReviewerConfig,
@@ -18,13 +18,13 @@ export class KimiReviewer implements Reviewer {
 
   async review(plan: string, focus: string, context?: string): Promise<RawReview> {
     return runBackendJsonReview({
-      backend: "kimi",
+      backend: "opencode",
       reviewerId: this.id,
       config: this.config,
       systemPrompt: REVIEWER_SYSTEM_PROMPT,
       userMessage: buildUserMessage(this.id, truncatePlan(plan), focus, context),
       timeoutMs: this.timeoutMs,
-      label: "Kimi",
+      label: "Opencode",
     });
   }
 }

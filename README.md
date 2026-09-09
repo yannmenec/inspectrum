@@ -250,6 +250,30 @@ type   = "cli"
 binary = "gemini"
 model  = "gemini-2.5-pro"
 
+[reviewers.muse]
+type   = "cli"
+binary = "muse"                   # muse exec, prompt passed via --prompt-file
+# model  = "..."                  # omit to inherit muse's own default
+# effort = "high"                 # passed as --reasoning-effort
+
+[reviewers.opencode]
+type   = "cli"
+binary = "opencode"               # opencode run, prompt on stdin
+# model  = "google/gemini-2.5-flash"   # -m, provider/model form
+# effort = "high"                 # passed as --variant
+
+[reviewers.agy]
+type   = "cli"
+binary = "agy"                    # schema-constrained structured output
+# model  = "..."                  # passed as --model
+# effort = "high"                 # --effort; only some models accept it
+
+[reviewers.grok]
+type   = "cli"
+binary = "grok"                   # confined to a read-only tool allow-list
+# model  = "grok-4.6-build"       # passed as -m
+# effort = "high"                 # passed as --effort
+
 [reviewers.local]
 type     = "http"
 backend  = "ollama"
@@ -261,7 +285,7 @@ report_max_chars = 8000           # caps the stored report
 timeout_seconds  = 300            # default reviewer wallclock
 ```
 
-Without a config file, `reviewers = ["codex"]` is used. Free-tier-friendly: the Gemini CLI works with a personal Google account, no API key. Experimental backends: kimi, qwen, openrouter, ollama (local, zero egress).
+Without a config file, `reviewers = ["codex"]` is used. No-API-key setups: the **codex** CLI works with a ChatGPT login, and the **agy** backend is Google's [Antigravity CLI](https://antigravity.google/docs/cli/install) (`curl -fsSL https://antigravity.google/cli/install.sh | bash`), which signs in with a personal Google account — the free-tier path that succeeds the retired gemini CLI. Experimental backends: kimi, qwen, openrouter, ollama (local, zero egress). The **muse** backend runs `muse exec` confined with `--disable-shell --disable-write` (a plan under review is untrusted input); `--yolo`, `--disable-sandbox` and `--enable-shell-tool` are rejected from `args`. The **opencode** backend runs `opencode run --agent summary`, a permission set that denies tool use (the default `build` agent will happily run shell commands from plan text); `--agent`, `--auto` and `--format` are rejected from `args`. The **agy** backend (Antigravity CLI) constrains its output with `--json-schema`, so reviews are schema-checked at the source; `--effort` is sent only when you set it (some models reject it). **agy is the one backend inspectrum cannot confine**: `--sandbox` and `--mode plan` were both verified NOT to stop a write (agy 1.1.27), so only use agy for plans you trust — muse, opencode and grok are the confined options, and `inspectrum doctor` warns whenever agy is configured. The **grok** backend is confined with a `--tools` allow-list (`read_file,grep,list_dir`): its `--sandbox` profile and `--disallowed-tools` were both verified NOT to stop a shell write, the allow-list was. `--tools`, `--always-approve` and `--permission-mode` are rejected from `args`. The **gemini** backend is deprecated and will be removed — migrate to agy.
 
 Headless or CI host that can't run an interactive login? Pass the peer API key through the MCP host's `env` block instead — `OPENAI_API_KEY` (codex), `ANTHROPIC_API_KEY` (claude), `GEMINI_API_KEY` (gemini). Manual JSON/TOML examples live under [`examples/`](examples/).
 
@@ -284,7 +308,7 @@ npx -y inspectrum@latest doctor
 
 - Session logs live at `~/.inspectrum/sessions/<timestamp>__<id>/` and contain your full plan plus a Markdown record of each reviewer's verdict and findings. Directory perms are **0700 on POSIX**. Logs written by pre-0.1.0 versions keep their original perms — retrofit with `chmod -R 700 ~/.inspectrum/sessions/`.
 - **Never paste secrets into a plan or context.** The plan is written to the local session log, and both the plan and context are sent to every active reviewer.
-- Cloud routes: **claude** → Anthropic (OAuth keychain or `ANTHROPIC_API_KEY`); **codex** → OpenAI (ChatGPT login or `OPENAI_API_KEY`); **gemini** → Google (personal-account CLI login or `GEMINI_API_KEY`); **openrouter** → openrouter.ai; **kimi** → Moonshot AI; **qwen** → Alibaba Cloud; **ollama** → localhost only, zero egress unless you change `endpoint`.
+- Cloud routes: **claude** → Anthropic (OAuth keychain or `ANTHROPIC_API_KEY`); **codex** → OpenAI (ChatGPT login or `OPENAI_API_KEY`); **gemini** → Google (personal-account CLI login or `GEMINI_API_KEY`); **openrouter** → openrouter.ai; **kimi** → Moonshot AI (device-code login: `kimi login`, not an env var); **qwen** → Alibaba Cloud; **muse** → the CLI's own stored credentials (`muse login`); **opencode** → whichever provider you configure (`opencode providers login`); **agy** → Google Antigravity (browser sign-in on first run, or `GEMINI_API_KEY` with `modelProvider: "gemini"` in `~/.gemini/antigravity-cli/settings.json`); **grok** → xAI (Grok Build balance); **ollama** → localhost only, zero egress unless you change `endpoint`.
 - Codex is invoked as `codex exec --ephemeral --skip-git-repo-check -s read-only …` in a throwaway temp directory — the sandbox is pinned read-only, sandbox-weakening and cwd-override args from your config are stripped, and codex persists no session files.
 
 </details>

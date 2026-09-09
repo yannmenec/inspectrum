@@ -3,10 +3,28 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { RawReviewSchema, ClaudeEnvelopeSchema, OllamaResponseSchema, OpenRouterResponseSchema } from "../schemas.js";
+import {
+  RawReviewSchema,
+  ClaudeEnvelopeSchema,
+  AgyEnvelopeSchema,
+  GrokEnvelopeSchema,
+  OllamaResponseSchema,
+  OpenRouterResponseSchema,
+} from "../schemas.js";
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 
-export type ReviewerBackend = "claude" | "codex" | "gemini" | "ollama" | "openrouter" | "kimi" | "qwen";
+export type ReviewerBackend =
+  | "claude"
+  | "codex"
+  | "gemini"
+  | "ollama"
+  | "openrouter"
+  | "kimi"
+  | "qwen"
+  | "muse"
+  | "opencode"
+  | "agy"
+  | "grok";
 
 const PLAN_MAX_CHARS = 16000;
 export const TRUNCATION_MARKER = "\n\n[...truncated]";
@@ -136,12 +154,12 @@ export function resolveReviewerBackend(id: string, config: ReviewerConfig): Revi
   if (idBackend) return idBackend;
 
   throw new ReviewerOperationalError(
-    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, ollama (http), openrouter (http).`,
+    `Reviewer backend "${id}" is not supported. Supported backends: claude, codex, gemini, kimi, qwen, muse, opencode, agy, grok, ollama (http), openrouter (http).`,
   );
 }
 
 function backendFromName(name: string): ReviewerBackend | undefined {
-  const known = ["claude", "codex", "gemini", "kimi", "qwen"] as const;
+  const known = ["claude", "codex", "gemini", "kimi", "qwen", "muse", "opencode", "agy", "grok"] as const;
   return (known as readonly string[]).includes(name) ? (name as ReviewerBackend) : undefined;
 }
 
@@ -163,7 +181,25 @@ export async function runBackendJsonReview(opts: {
   if (opts.backend === "codex") return runCodexJsonReview(opts);
   if (opts.backend === "kimi") return runKimiJsonReview(opts);
   if (opts.backend === "qwen") return runQwenJsonReview(opts);
-  return runGeminiJsonReview(opts);
+  if (opts.backend === "gemini") return runGeminiJsonReview(opts);
+  if (opts.backend === "muse") return runMuseJsonReview(opts);
+  if (opts.backend === "opencode") return runOpencodeJsonReview(opts);
+  if (opts.backend === "agy") return runAgyJsonReview(opts);
+  if (opts.backend === "grok") return runGrokJsonReview(opts);
+  return assertUnhandledBackend(opts.backend);
+}
+
+/**
+ * Exhaustiveness guard for backend dispatch. The `never` parameter makes a
+ * forgotten branch a COMPILE error; the throw covers the runtime case where a
+ * value reaches us from outside the type system (a hand-edited config.toml, or
+ * a stale build). Both dispatch sites previously ended in a bare Gemini return,
+ * which silently ran Gemini for any unhandled backend instead of failing.
+ */
+export function assertUnhandledBackend(backend: never): never {
+  throw new ReviewerOperationalError(
+    `Unhandled reviewer backend: ${String(backend)}. This is a bug in inspectrum's backend dispatch.`,
+  );
 }
 
 export async function runHttpJsonReview(opts: {
@@ -404,6 +440,24 @@ async function runGeminiJsonReview(opts: {
   return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
 }
 
+const KIMI_RESERVED: ReservedFlags = {
+  bool: ["-p", "--prompt", "-y", "--yolo", "--auto", "-c", "--continue", "--plan"],
+  paired: ["-m", "--model", "--output-format", "-S", "--session"],
+};
+
+/**
+ * kimi (`kimi-code`) reviewer. Contract verified against kimi 0.41.0 — the flags
+ * were previously guessed, and the guess was wrong on both points that matter:
+ *
+ *  - kimi does NOT read stdin. Passing the plan there meant the model never saw
+ *    it: asked to echo a secret word supplied only on stdin, kimi answered
+ *    "NOSTDIN". The whole prompt therefore goes in the -p argument.
+ *  - default text output is prefixed with "• ", which stripJsonPayload cannot
+ *    recover. --output-format stream-json emits clean JSONL instead, with the
+ *    review carried on the single `role: "assistant"` line.
+ *
+ * Auth: the CLI's own device-code login (`kimi login`), not an env var.
+ */
 async function runKimiJsonReview(opts: {
   reviewerId: string;
   config: ReviewerConfig;
@@ -412,17 +466,377 @@ async function runKimiJsonReview(opts: {
   timeoutMs: number;
   label: string;
 }): Promise<RawReview> {
-  // ASSUMPTION: kimi CLI (uv tool install --python 3.13 kimi-cli) uses:
-  //   kimi -m <model> -p <systemPrompt>
-  //   stdin = userMessage, stdout = JSON or markdown-fenced JSON
-  // Auth: MOONSHOT_API_KEY env var (CLI reads automatically)
-  // If actual CLI flags differ, update the args array below.
   const binary = opts.config.binary ?? "kimi";
-  const model = extractModel(opts.config, "kimi-k2");
-  const userArgs = mergeReviewerArgs(opts.config.args, GEMINI_FAMILY_RESERVED);
-  const args = ["-m", model, ...userArgs, "-p", opts.systemPrompt + JSON_INSTRUCTION];
-  const { stdout } = await spawnCollect({ binary, args, stdin: opts.userMessage, timeoutMs: opts.timeoutMs, label: opts.label });
-  return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+  const model = extractModel(opts.config);
+  const userArgs = mergeReviewerArgs(opts.config.args, KIMI_RESERVED);
+  const args = [
+    "--output-format",
+    "stream-json",
+    ...(model ? ["-m", model] : []),
+    ...userArgs,
+    "-p",
+    `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`,
+  ];
+  const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label });
+  return parseKimiStreamJson(stdout, opts.reviewerId, opts.label);
+}
+
+/**
+ * Extracts the review from kimi's JSONL stream. Verified shape: a
+ * `{role:"meta",type:"system.version"}` line, assistant line(s) carrying
+ * content, and a closing `session.resume_hint` meta line.
+ *
+ * The LAST assistant content line wins, not the first: kimi may emit several
+ * assistant events before the final answer (a streamed partial, a tool
+ * narration), and picking the first would return a truncated or non-JSON
+ * fragment. Any assistant line that carries the review parses on its own.
+ */
+function parseKimiStreamJson(raw: string, reviewerId: string, label: string): RawReview {
+  const lines = raw.trim().split("\n").filter((l) => l.trim() !== "");
+  let lastAssistantContent: string | undefined;
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue; // non-JSON noise between events
+    }
+    const event = parsed as { role?: unknown; content?: unknown };
+    if (event.role === "assistant" && typeof event.content === "string") {
+      lastAssistantContent = event.content;
+    }
+  }
+  if (lastAssistantContent === undefined) {
+    throw new ReviewerOperationalError(
+      `${label} reviewer produced no assistant message: ${raw.slice(0, 200)}`,
+    );
+  }
+  return parseRawReview(stripJsonPayload(lastAssistantContent), reviewerId, label);
+}
+
+const MUSE_RESERVED: ReservedFlags = {
+  // `exec` is the subcommand we always inject. The confinement flags are pinned
+  // by the canonical invocation: a plan under review is untrusted input, and a
+  // real run of `muse exec --disable-approval` alone DID execute a shell command
+  // and write outside the repo. --yolo / --disable-sandbox / --enable-shell-tool
+  // would undo that, and --json switches stdout to a JSONL event stream.
+  bool: [
+    "exec",
+    "--disable-approval",
+    "--disable-shell",
+    "--disable-write",
+    "--yolo",
+    "--disable-sandbox",
+    "--enable-shell-tool",
+    "--json",
+    "--trust-workspace",
+  ],
+  paired: ["--model", "--reasoning-effort", "--prompt-file", "--provider", "--preset"],
+};
+
+/**
+ * muse takes its prompt positionally or via --prompt-file, and does NOT read the
+ * user message from stdin. We use --prompt-file (0600, in a temp dir) so the plan
+ * never lands in argv where `ps aux` would expose it, and so long plans cannot hit
+ * ARG_MAX. stdin is deliberately left unwritten: `muse exec` also supports
+ * --api-key-stdin on that stream.
+ *
+ * Verified against muse 0.x: exit 0, bare JSON on stdout, diagnostics on stderr.
+ */
+async function runMuseJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "muse";
+  const model = extractModel(opts.config);
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-muse-"));
+  const promptFile = join(tempDir, "prompt.txt");
+
+  try {
+    writeFileSync(promptFile, `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    const userArgs = mergeReviewerArgs(opts.config.args, MUSE_RESERVED);
+    const args = [
+      "exec",
+      "--disable-approval",
+      "--disable-shell",
+      "--disable-write",
+      ...(model ? ["--model", model] : []),
+      ...(opts.config.effort ? ["--reasoning-effort", opts.config.effort] : []),
+      ...userArgs,
+      "--prompt-file",
+      promptFile,
+    ];
+    const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+const OPENCODE_RESERVED: ReservedFlags = {
+  // `run` is the subcommand we always inject. --auto broadens permissions, and
+  // --format json switches stdout to a raw event stream instead of our object.
+  bool: ["run", "--auto", "-c", "--continue", "--share", "-i", "--interactive"],
+  // --agent carries the confinement (see below) and must not be overridden.
+  paired: ["--agent", "-m", "--model", "--variant", "--format", "-s", "--session", "--command"],
+};
+
+/**
+ * opencode (`opencode run`) reviewer.
+ *
+ * Confinement: `--agent summary` is pinned. Verified against the real CLI — the
+ * default `build` agent ran a shell command from prompt text and wrote outside
+ * the repo, while `summary` (whose permission set ends in
+ * {"permission":"*","action":"deny"}) refused the same prompt and still returned
+ * a well-formed review. The plan under review is untrusted input, so the
+ * reviewer must not be able to run tools.
+ *
+ * `summary` is a BUILT-IN agent, not something from user config: a clean
+ * opencode install ships it (`opencode agent list` shows `summary (primary)`),
+ * so the pin resolves on any machine and cannot be silently overridden by a
+ * user-defined agent of the same name. (User agents live under
+ * ~/.config/opencode/agent/ and are listed alongside, but summary is not one of
+ * them.)
+ *
+ * Verified: opencode reads the prompt from stdin, prints bare JSON on stdout and
+ * keeps its decorative banner on stderr. `--format json` is NOT used: it emits a
+ * stream of raw events rather than the review object.
+ */
+async function runOpencodeJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "opencode";
+  const model = extractModel(opts.config);
+  const userArgs = mergeReviewerArgs(opts.config.args, OPENCODE_RESERVED);
+  // Throwaway cwd (same reasoning as agy/codex): the `summary` agent denies
+  // tool use, but the child must not inherit the host's working directory on
+  // the off-chance a permission ever slips through.
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-opencode-"));
+  try {
+    const args = [
+      "run",
+      "--agent",
+      "summary",
+      ...(model ? ["-m", model] : []),
+      ...(opts.config.effort ? ["--variant", opts.config.effort] : []),
+      ...userArgs,
+    ];
+    const stdin = `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`;
+    const { stdout } = await spawnCollect({ binary, args, stdin, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+const AGY_RESERVED: ReservedFlags = {
+  bool: ["-p", "--print", "--prompt", "--disable-slash-commands", "--dangerously-skip-permissions"],
+  paired: ["--output-format", "--json-schema", "--model", "--effort", "--input-format", "--mode"],
+};
+
+/**
+ * agy reviewer. Verified contract:
+ *   agy -p <prompt> --disable-slash-commands --json-schema <schema>
+ *       --output-format json [--model <m>] [--effort <e>]
+ *
+ * `--effort` is passed ONLY when configured: a real run of `agy --effort high`
+ * with no model failed with "--effort is not supported for the current model".
+ *
+ * CONFINEMENT (verified on agy 1.1.27, do not "fix" without re-probing): agy has
+ * NO flag that confines it. `--sandbox` did not stop a write to /tmp; `--mode
+ * plan` did not stop one either — with the canonical flags the CLI itself warns
+ * "--mode plan has no effect while slash command expansion is disabled", and
+ * WITHOUT `--disable-slash-commands` the write still happened (agy: "/plan mode
+ * ... does not restrict my ability to run shell commands or write files"). The
+ * reviewer is spawned in a throwaway temp cwd (below) and the README + doctor
+ * warn that agy reviews must not come from an untrusted source — prefer muse,
+ * opencode or grok for that case.
+ *
+ * Output is a proprietary envelope — {conversation_id, status, response,
+ * structured_output, ...} — sharing no field names with Claude's, hence its own
+ * AgyEnvelopeSchema. `structured_output` is preferred because --json-schema fills
+ * it deterministically; `response` is a STRINGIFIED JSON fallback that has been
+ * observed carrying a markdown fence, so it goes through stripJsonPayload.
+ */
+async function runAgyJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "agy";
+  const model = extractModel(opts.config);
+  const userArgs = mergeReviewerArgs(opts.config.args, AGY_RESERVED);
+  // Throwaway cwd: without it the child inherits the MCP host's working
+  // directory (often the user's own repo). A plan under review is untrusted
+  // input; a write-capable reviewer must not start out inside real code.
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-agy-"));
+  try {
+    const args = [
+      "-p",
+      `${opts.systemPrompt}\n\n${opts.userMessage}`,
+      "--disable-slash-commands",
+      ...(model ? ["--model", model] : []),
+      ...(opts.config.effort ? ["--effort", opts.config.effort] : []),
+      ...userArgs,
+      "--json-schema",
+      RAW_REVIEW_JSON_SCHEMA,
+      "--output-format",
+      "json",
+    ];
+    const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseAgyOutput(stdout, opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function parseAgyOutput(raw: string, reviewerId: string, label: string): RawReview {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    throw new ReviewerOperationalError(`${label} reviewer returned non-JSON output: ${raw.slice(0, 200)}`);
+  }
+
+  const envelope = AgyEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) {
+    throw new ReviewerOperationalError(`${label} output did not match expected envelope: ${raw.slice(0, 200)}`);
+  }
+  if (envelope.data.status !== "SUCCESS") {
+    const detail = envelope.data.error ?? envelope.data.response ?? envelope.data.status;
+    throw new ReviewerOperationalError(`${label} reviewer failed: ${detail}`);
+  }
+
+  const payload =
+    envelope.data.structured_output == null
+      ? stripJsonPayload(envelope.data.response ?? "")
+      : JSON.stringify(envelope.data.structured_output);
+  return parseRawReview(payload, reviewerId, label);
+}
+
+/**
+ * Built-in grok tools the reviewer is allowed to use. This is an ALLOW-LIST and it
+ * is the only mechanism that actually confines grok — all three were tested
+ * against the real CLI:
+ *   --sandbox read-only        did NOT stop a write to /tmp
+ *   --disallowed-tools <names> was ignored (grok still reported
+ *                              run_terminal_command as available)
+ *   --tools <allow-list>       DID stop it: "I don't have a local shell tool in
+ *                              this session", with the write never happening.
+ * Reviewing a plan needs no shell, no writes and no subagents.
+ */
+const GROK_ALLOWED_TOOLS = "read_file,grep,list_dir";
+
+const GROK_MAX_TURNS = "8";
+
+const GROK_RESERVED: ReservedFlags = {
+  bool: ["--disable-web-search", "--no-subagents", "--always-approve", "-p", "--single"],
+  paired: [
+    "--tools",
+    "--disallowed-tools",
+    "--max-turns",
+    "--permission-mode",
+    "--sandbox",
+    "--json-schema",
+    "--output-format",
+    "--prompt-file",
+    "--system-prompt-override",
+  ],
+};
+
+/**
+ * grok reviewer. Verified contract:
+ *   grok --prompt-file <file> --json-schema <schema> --tools <allow-list>
+ *        --max-turns N --disable-web-search --no-subagents [-m <model>] [--effort <e>]
+ *
+ * Output is a THIRD distinct envelope: {text, stopReason, structuredOutput} —
+ * camelCase, unlike Claude's structured_output and agy's response. A valid
+ * structuredOutput is accepted regardless of stopReason (the schema was
+ * satisfied; a trailing thought may simply have hit a token cap); without one,
+ * anything other than end_turn is an operational failure.
+ */
+async function runGrokJsonReview(opts: {
+  reviewerId: string;
+  config: ReviewerConfig;
+  systemPrompt: string;
+  userMessage: string;
+  timeoutMs: number;
+  label: string;
+}): Promise<RawReview> {
+  const binary = opts.config.binary ?? "grok";
+  const model = extractModel(opts.config);
+  const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-grok-"));
+  const promptFile = join(tempDir, "prompt.txt");
+
+  try {
+    writeFileSync(promptFile, `${opts.systemPrompt}\n\n${opts.userMessage}`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    const userArgs = mergeReviewerArgs(opts.config.args, GROK_RESERVED);
+    const args = [
+      "--prompt-file",
+      promptFile,
+      "--tools",
+      GROK_ALLOWED_TOOLS,
+      "--max-turns",
+      GROK_MAX_TURNS,
+      "--disable-web-search",
+      "--no-subagents",
+      ...(model ? ["-m", model] : []),
+      ...(opts.config.effort ? ["--effort", opts.config.effort] : []),
+      ...userArgs,
+      "--json-schema",
+      RAW_REVIEW_JSON_SCHEMA,
+    ];
+    const { stdout } = await spawnCollect({ binary, args, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    return parseGrokOutput(stdout, opts.reviewerId, opts.label);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function parseGrokOutput(raw: string, reviewerId: string, label: string): RawReview {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    throw new ReviewerOperationalError(`${label} reviewer returned non-JSON output: ${raw.slice(0, 200)}`);
+  }
+
+  const envelope = GrokEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) {
+    throw new ReviewerOperationalError(`${label} output did not match expected envelope: ${raw.slice(0, 200)}`);
+  }
+  // A failing run prints {"type":"error","message":"..."} (e.g. HTTP 402).
+  if (envelope.data.type === "error") {
+    throw new ReviewerOperationalError(`${label} reviewer failed: ${envelope.data.message ?? "unknown error"}`);
+  }
+
+  if (envelope.data.structuredOutput != null) {
+    return parseRawReview(JSON.stringify(envelope.data.structuredOutput), reviewerId, label);
+  }
+  if (envelope.data.stopReason !== "end_turn") {
+    throw new ReviewerOperationalError(
+      `${label} reviewer stopped early (stopReason: ${envelope.data.stopReason ?? "unknown"}) without structured output`,
+    );
+  }
+  return parseRawReview(stripJsonPayload(envelope.data.text ?? ""), reviewerId, label);
 }
 
 async function runQwenJsonReview(opts: {
@@ -460,10 +874,19 @@ function extractModel(config: ReviewerConfig, defaultModel?: string): string | u
   return defaultModel;
 }
 
-function spawnCollect(opts: {
+/**
+ * Spawns a reviewer CLI and collects stdout/stderr.
+ *
+ * `stdin` is OPTIONAL: backends that hand the prompt over by file (muse and grok
+ * `--prompt-file`) must not have an unrelated payload written to their stdin —
+ * `muse exec` also reads `--api-key-stdin` from that stream. When `stdin` is
+ * omitted the stream is closed immediately without a write, so the child never
+ * blocks waiting on input. An empty string is a payload and IS written.
+ */
+export function spawnCollect(opts: {
   binary: string;
   args: string[];
-  stdin: string;
+  stdin?: string;
   timeoutMs: number;
   label: string;
   cwd?: string;
@@ -516,7 +939,7 @@ function spawnCollect(opts: {
       });
     });
 
-    proc.stdin.write(opts.stdin);
+    if (opts.stdin !== undefined) proc.stdin.write(opts.stdin);
     proc.stdin.end();
   });
 }

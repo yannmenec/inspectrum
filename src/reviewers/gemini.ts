@@ -7,6 +7,11 @@ import {
 import type { RawReview, ReviewerConfig } from "../schemas.js";
 import type { Reviewer } from "./index.js";
 
+/**
+ * @deprecated The gemini harness is being retired in favour of the agy backend.
+ * Still functional; `inspectrum doctor` emits a migration warning. Scheduled for
+ * removal in a follow-up change — do not build new behaviour on this adapter.
+ */
 export class GeminiReviewer implements Reviewer {
   constructor(
     public readonly id: string,

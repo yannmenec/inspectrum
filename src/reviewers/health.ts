@@ -13,6 +13,27 @@ export interface HealthResult {
 
 export const MIN_CODEX_VERSION = "0.99.0";
 
+/**
+ * Backends kept working but scheduled for removal. `doctor` surfaces the notice
+ * as a warning so users can migrate before the adapter is deleted; a deprecated
+ * backend is NOT unhealthy, so `ok` stays true and `allOk` is unaffected.
+ */
+const DEPRECATED_BACKENDS: Record<string, string> = {
+  gemini: "the gemini harness is deprecated and will be removed — migrate to the agy backend",
+};
+
+/**
+ * Backends that work but cannot be confined. A plan under review is untrusted
+ * input, so a write-capable reviewer is only safe when the CLI can be pinned to
+ * refuse writes — agy (Antigravity CLI) has no such flag (verified on agy
+ * 1.1.27: --sandbox and --mode plan both still allow writes to /tmp). Surfaced
+ * as a doctor warning, on the same footing as the deprecation notice; like a
+ * deprecation it does NOT toggle `ok`.
+ */
+const UNCONFINED_BACKENDS: Record<string, string> = {
+  agy: "agy cannot be confined (no working --sandbox/--mode plan barrier) — do not review plans from an untrusted source with it; prefer muse, opencode or grok",
+};
+
 // Env vars each CLI backend will look for when actually invoked. Entries are
 // alternatives — if any one is set to a truthy value, auth is presumed present.
 // Backends not in this map (e.g. ollama, local CLIs) are not checked.
@@ -105,12 +126,17 @@ function checkCli(id: string, binary: string): HealthResult {
   }
 
   const versionDetails = version ? { version } : {};
+  const deprecation = DEPRECATED_BACKENDS[id];
+  const unconfined = UNCONFINED_BACKENDS[id];
   // Binary appears to exist. Warn if the peer-LLM auth env var is missing AND we can't detect
   // an interactive OAuth login — Desktop MCP hosts often don't propagate API keys.
   const envs = CLI_REVIEWER_ENV[id];
+  const advisories = [deprecation, unconfined].filter((a): a is string => a !== undefined);
   if (envs && !envs.some((k) => !!process.env[k])) {
     const oauthStatus = getOauthStatus(id, binary);
-    if (oauthStatus === "logged-in") return { ok: true, ...versionDetails };
+    if (oauthStatus === "logged-in") {
+      return { ok: true, ...versionDetails, ...(advisories.length ? { warning: advisories.join("; ") } : {}) };
+    }
     if (id === "codex" && oauthStatus === "logged-out") {
       return {
         ok: false,
@@ -120,13 +146,14 @@ function checkCli(id: string, binary: string): HealthResult {
       };
     }
     const envList = envs.length === 1 ? envs[0] : envs.join(" or ");
+    const authWarning = `binary found but ${envList} not set — reviews will fail unless ${binary} has an OAuth login`;
     return {
       ok: true,
-      warning: `binary found but ${envList} not set — reviews will fail unless ${binary} has an OAuth login`,
+      warning: advisories.length ? `${authWarning}; ${advisories.join("; ")}` : authWarning,
       ...versionDetails,
     };
   }
-  return { ok: true, ...versionDetails };
+  return { ok: true, ...versionDetails, ...(advisories.length ? { warning: advisories.join("; ") } : {}) };
 }
 
 interface ParsedCodexVersion {
@@ -247,8 +274,12 @@ function installFix(id: string): string {
     claude: "Install Claude Code: https://claude.ai/download",
     codex: "npm install -g @openai/codex@latest",
     gemini: "Install Gemini CLI: npm install -g @google/gemini-cli",
-    kimi: "Install Kimi CLI: uv tool install --python 3.13 kimi-cli",
+    kimi: "Install Kimi Code CLI, then run `kimi login` (device-code flow)",
     qwen: "Install Qwen Code CLI: npm install -g @qwen-code/qwen-code@latest",
+    muse: "Install the muse CLI and ensure it is in your PATH, then run `muse login`",
+    opencode: "Install opencode: https://opencode.ai — then run `opencode providers login`",
+    agy: "Install the Antigravity CLI (agy): curl -fsSL https://antigravity.google/cli/install.sh | bash — then run `agy` once and sign in",
+    grok: "Install the grok CLI and ensure it is in your PATH, then sign in",
     ollama: "Start Ollama: brew install ollama && ollama serve",
     openrouter: "Set OPENROUTER_API_KEY env var: https://openrouter.ai/keys",
   };

@@ -6,7 +6,11 @@ import { OllamaReviewer } from "./ollama.js";
 import { OpenRouterReviewer } from "./openrouter.js";
 import { KimiReviewer } from "./kimi.js";
 import { QwenReviewer } from "./qwen.js";
-import { resolveReviewerBackend } from "./common.js";
+import { MuseReviewer } from "./muse.js";
+import { OpencodeReviewer } from "./opencode.js";
+import { AgyReviewer } from "./agy.js";
+import { GrokReviewer } from "./grok.js";
+import { assertUnhandledBackend, resolveReviewerBackend } from "./common.js";
 
 export interface Reviewer {
   id: string;
@@ -22,7 +26,24 @@ export function createReviewer(id: string, config: ReviewerConfig, limits?: Conf
   if (backend === "openrouter") return new OpenRouterReviewer(id, config, timeoutMs);
   if (backend === "kimi") return new KimiReviewer(id, config, timeoutMs);
   if (backend === "qwen") return new QwenReviewer(id, config, timeoutMs);
-  return new GeminiReviewer(id, config, timeoutMs);
+  if (backend === "gemini") return new GeminiReviewer(id, config, timeoutMs);
+  if (backend === "muse") return new MuseReviewer(id, config, timeoutMs);
+  if (backend === "opencode") return new OpencodeReviewer(id, config, timeoutMs);
+  if (backend === "agy") return new AgyReviewer(id, config, timeoutMs);
+  if (backend === "grok") return new GrokReviewer(id, config, timeoutMs);
+  return assertUnhandledBackend(backend);
 }
 
-export { ClaudeReviewer, CodexReviewer, GeminiReviewer, OllamaReviewer, OpenRouterReviewer, KimiReviewer, QwenReviewer };
+export {
+  ClaudeReviewer,
+  CodexReviewer,
+  GeminiReviewer,
+  OllamaReviewer,
+  OpenRouterReviewer,
+  KimiReviewer,
+  QwenReviewer,
+  MuseReviewer,
+  OpencodeReviewer,
+  AgyReviewer,
+  GrokReviewer,
+};
