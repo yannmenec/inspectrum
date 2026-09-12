@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,27 +18,43 @@ const fixtureBinary = fileURLToPath(new URL("../../fixtures/bin/opencode-cwd-pro
 describe("spawnCollect real-child env inheritance (no env option)", () => {
   let evidenceDir: string;
   let evidenceFile: string;
+  let childCwdDir: string;
   const savedMarker = process.env["INSPECTRUM_TEST_MARKER"];
   const savedEvidence = process.env["INSPECTRUM_TEST_EVIDENCE"];
+  const savedPwd = process.env["PWD"];
 
   afterEach(() => {
     if (evidenceDir) rmSync(evidenceDir, { recursive: true, force: true });
+    if (childCwdDir) rmSync(childCwdDir, { recursive: true, force: true });
     if (savedMarker === undefined) delete process.env["INSPECTRUM_TEST_MARKER"];
     else process.env["INSPECTRUM_TEST_MARKER"] = savedMarker;
     if (savedEvidence === undefined) delete process.env["INSPECTRUM_TEST_EVIDENCE"];
     else process.env["INSPECTRUM_TEST_EVIDENCE"] = savedEvidence;
+    if (savedPwd === undefined) delete process.env["PWD"];
+    else process.env["PWD"] = savedPwd;
   });
 
-  it("leaves PWD and an arbitrary parent env var unchanged when no env option is passed", async () => {
+  it("runs the child in the supplied cwd while inheriting the parent's (sentinel, unnormalized) PWD unchanged", async () => {
     evidenceDir = mkdtempSync(join(tmpdir(), "inspectrum-spawn-env-probe-"));
     evidenceFile = join(evidenceDir, "evidence.json");
+    childCwdDir = realpathSync(mkdtempSync(join(tmpdir(), "inspectrum-spawn-env-cwd-")));
     process.env["INSPECTRUM_TEST_MARKER"] = "no-env-marker";
     process.env["INSPECTRUM_TEST_EVIDENCE"] = evidenceFile;
+    // A sentinel value that is NOT a real, canonical path: proves spawnCollect
+    // passes the parent's PWD through as-is rather than normalizing/deriving
+    // it from the child's actual cwd.
+    const sentinelParentPwd = "/tmp/issue-110-parent-pwd-sentinel-unnormalized/../unnormalized";
+    process.env["PWD"] = sentinelParentPwd;
 
-    await spawnCollect({ binary: fixtureBinary, args: [], timeoutMs: 5000, label: "X" });
+    await spawnCollect({ binary: fixtureBinary, args: [], timeoutMs: 5000, label: "X", cwd: childCwdDir });
 
-    const evidence = JSON.parse(readFileSync(evidenceFile, "utf8")) as { pwd: string | undefined; marker: string };
-    expect(evidence.pwd).toBe(process.env["PWD"]);
+    const evidence = JSON.parse(readFileSync(evidenceFile, "utf8")) as {
+      cwd: string;
+      pwd: string | undefined;
+      marker: string;
+    };
+    expect(evidence.cwd).toBe(childCwdDir);
+    expect(evidence.pwd).toBe(sentinelParentPwd);
     expect(evidence.marker).toBe("no-env-marker");
   });
 });

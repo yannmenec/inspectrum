@@ -20,6 +20,7 @@ describe("OpencodeReviewer — real-child cwd/PWD pinning", () => {
   let evidenceFile: string;
   const savedMarker = process.env["INSPECTRUM_TEST_MARKER"];
   const savedEvidence = process.env["INSPECTRUM_TEST_EVIDENCE"];
+  const savedPwd = process.env["PWD"];
 
   afterEach(() => {
     if (evidenceDir) rmSync(evidenceDir, { recursive: true, force: true });
@@ -27,13 +28,17 @@ describe("OpencodeReviewer — real-child cwd/PWD pinning", () => {
     else process.env["INSPECTRUM_TEST_MARKER"] = savedMarker;
     if (savedEvidence === undefined) delete process.env["INSPECTRUM_TEST_EVIDENCE"];
     else process.env["INSPECTRUM_TEST_EVIDENCE"] = savedEvidence;
+    if (savedPwd === undefined) delete process.env["PWD"];
+    else process.env["PWD"] = savedPwd;
   });
 
-  it("runs the child with cwd, PWD and --dir all equal to the canonical throwaway dir", async () => {
+  it("runs the child with cwd, PWD and --dir all equal to the canonical throwaway dir, and leaves the parent's PWD untouched", async () => {
     evidenceDir = mkdtempSync(join(tmpdir(), "inspectrum-opencode-probe-"));
     evidenceFile = join(evidenceDir, "evidence.json");
     process.env["INSPECTRUM_TEST_MARKER"] = "issue-110-marker";
     process.env["INSPECTRUM_TEST_EVIDENCE"] = evidenceFile;
+    const sentinelParentPwd = "/tmp/issue-110-parent-pwd-sentinel";
+    process.env["PWD"] = sentinelParentPwd;
 
     const config: ReviewerConfig = { type: "cli", binary: fixtureBinary };
     await new OpencodeReviewer("opencode", config).review("# Plan", "all");
@@ -51,5 +56,8 @@ describe("OpencodeReviewer — real-child cwd/PWD pinning", () => {
     expect(evidence.pwd).toBe(evidence.cwd);
     expect(evidence.selectedDir).toBe(evidence.cwd);
     expect(evidence.marker).toBe("issue-110-marker");
+    expect(evidence.argv[evidence.argv.indexOf("--dir") + 1]).toBe(evidence.cwd);
+    // The child's synthesized PWD must not leak back into the parent process.
+    expect(process.env["PWD"]).toBe(sentinelParentPwd);
   });
 });
