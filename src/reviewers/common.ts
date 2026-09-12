@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
@@ -585,7 +585,11 @@ const OPENCODE_RESERVED: ReservedFlags = {
   // --format json switches stdout to a raw event stream instead of our object.
   bool: ["run", "--auto", "-c", "--continue", "--share", "-i", "--interactive"],
   // --agent carries the confinement (see below) and must not be overridden.
-  paired: ["--agent", "-m", "--model", "--variant", "--format", "-s", "--session", "--command"],
+  // --dir is pinned to the canonical throwaway directory below, so a
+  // user-supplied value must not survive. --attach is dropped outright: it
+  // would let a plan reattach to an unrelated running session or directory,
+  // and there is no confined replacement for it.
+  paired: ["--agent", "-m", "--model", "--variant", "--format", "-s", "--session", "--command", "--dir", "--attach"],
 };
 
 /**
@@ -622,19 +626,33 @@ async function runOpencodeJsonReview(opts: {
   const userArgs = mergeReviewerArgs(opts.config.args, OPENCODE_RESERVED);
   // Throwaway cwd (same reasoning as agy/codex): the `summary` agent denies
   // tool use, but the child must not inherit the host's working directory on
-  // the off-chance a permission ever slips through.
+  // the off-chance a permission ever slips through. Resolved to its canonical
+  // (symlink-free) form so cwd, PWD and --dir all agree on the same path —
+  // opencode can otherwise resolve a relative --dir, or read PWD, against a
+  // symlinked or inherited notion of "here" instead of the directory we spawned it in.
   const tempDir = mkdtempSync(join(tmpdir(), "inspectrum-opencode-"));
   try {
+    const canonicalDir = realpathSync(tempDir);
     const args = [
       "run",
       "--agent",
       "summary",
+      "--dir",
+      canonicalDir,
       ...(model ? ["-m", model] : []),
       ...(opts.config.effort ? ["--variant", opts.config.effort] : []),
       ...userArgs,
     ];
     const stdin = `${opts.systemPrompt}${JSON_INSTRUCTION}\n\n${opts.userMessage}`;
-    const { stdout } = await spawnCollect({ binary, args, stdin, timeoutMs: opts.timeoutMs, label: opts.label, cwd: tempDir });
+    const { stdout } = await spawnCollect({
+      binary,
+      args,
+      stdin,
+      timeoutMs: opts.timeoutMs,
+      label: opts.label,
+      cwd: canonicalDir,
+      env: { ...process.env, PWD: canonicalDir },
+    });
     return parseRawReview(stripJsonPayload(stdout), opts.reviewerId, opts.label);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -890,6 +908,7 @@ export function spawnCollect(opts: {
   timeoutMs: number;
   label: string;
   cwd?: string;
+  env?: NodeJS.ProcessEnv;
 }): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -906,7 +925,11 @@ export function spawnCollect(opts: {
 
     let proc: ChildProcessWithoutNullStreams;
     try {
-      proc = spawn(opts.binary, opts.args, { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"] });
+      proc = spawn(opts.binary, opts.args, {
+        cwd: opts.cwd,
+        ...(opts.env ? { env: opts.env } : {}),
+        stdio: ["pipe", "pipe", "pipe"],
+      });
     } catch (err) {
       reject(new ReviewerOperationalError(`${opts.label} reviewer failed to start: ${errorMessage(err)}`));
       return;

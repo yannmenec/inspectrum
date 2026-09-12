@@ -8,6 +8,7 @@ vi.mock("node:fs", async (importOriginal) => {
   return {
     ...actual,
     mkdtempSync: vi.fn(() => "/tmp/inspectrum-opencode-private"),
+    realpathSync: vi.fn(() => "/tmp/inspectrum-opencode-private"),
     rmSync: vi.fn(),
   };
 });
@@ -193,6 +194,40 @@ describe("OpencodeReviewer — user args and reserved flags", () => {
     await new OpencodeReviewer("opencode", { ...cfg, args: ["--continue"] }).review("# Plan", "all");
     expect(argsOf()).not.toContain("--continue");
   });
+
+  // Regression (issue-110): --dir is pinned to the canonical throwaway
+  // directory; a user-supplied value (space or `=` form) must not survive.
+  it("drops a user-supplied --dir (space form) and keeps the pinned canonical value", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    await new OpencodeReviewer("opencode", { ...cfg, args: ["--dir", "/etc"] }).review("# Plan", "all");
+    const args = argsOf();
+    expect(args).not.toContain("/etc");
+    expect(args[args.indexOf("--dir") + 1]).toBe("/tmp/inspectrum-opencode-private");
+    expect(args.filter((a) => a === "--dir")).toHaveLength(1);
+  });
+
+  it("drops a user-supplied --dir (`=` form) and keeps the pinned canonical value", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    await new OpencodeReviewer("opencode", { ...cfg, args: ["--dir=/etc"] }).review("# Plan", "all");
+    const args = argsOf();
+    expect(args.join(" ")).not.toContain("/etc");
+    expect(args[args.indexOf("--dir") + 1]).toBe("/tmp/inspectrum-opencode-private");
+  });
+
+  // --attach is dropped outright: there is no confined replacement for it.
+  it("drops a user-supplied --attach (space form) with no replacement", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    await new OpencodeReviewer("opencode", { ...cfg, args: ["--attach", "some-session"] }).review("# Plan", "all");
+    const args = argsOf();
+    expect(args).not.toContain("--attach");
+    expect(args).not.toContain("some-session");
+  });
+
+  it("drops a user-supplied --attach (`=` form) with no replacement", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    await new OpencodeReviewer("opencode", { ...cfg, args: ["--attach=some-session"] }).review("# Plan", "all");
+    expect(argsOf().join(" ")).not.toContain("--attach");
+  });
 });
 
 describe("OpencodeReviewer — output parsing", () => {
@@ -249,6 +284,25 @@ describe("OpencodeReviewer — cwd isolation", () => {
     const spawnOptions = mockSpawn.mock.calls[0]![2];
     expect(spawnOptions).toMatchObject({ cwd: "/tmp/inspectrum-opencode-private" });
     expect(spawnOptions?.cwd).not.toBe(process.cwd());
+  });
+
+  // Regression (issue-110): a child that reads PWD (or resolves a relative
+  // --dir against it) instead of using the real cwd could still land in the
+  // host repo. cwd, PWD and --dir must all agree on the canonical throwaway dir.
+  it("pins PWD to the same canonical directory as cwd and --dir", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    await new OpencodeReviewer("opencode", cfg).review("# Plan", "all");
+    const spawnOptions = mockSpawn.mock.calls[0]![2];
+    const args = argsOf();
+    expect(spawnOptions?.env?.["PWD"]).toBe("/tmp/inspectrum-opencode-private");
+    expect(args[args.indexOf("--dir") + 1]).toBe("/tmp/inspectrum-opencode-private");
+  });
+
+  it("preserves the rest of the parent environment alongside the pinned PWD", async () => {
+    mockSpawn.mockReturnValue(makeMockProcess(JSON.stringify(validRawReview)));
+    await new OpencodeReviewer("opencode", cfg).review("# Plan", "all");
+    const spawnOptions = mockSpawn.mock.calls[0]![2];
+    expect(spawnOptions?.env?.["PATH"]).toBe(process.env["PATH"]);
   });
 
   it("removes the temp directory after a successful run", async () => {
